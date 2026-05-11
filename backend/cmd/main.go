@@ -1,50 +1,23 @@
 package main
 
 import (
-	"database/sql"
-	"net/http"
+	"community-backend/config"
+	"community-backend/internal/db"
+	"community-backend/internal/router"
 
 	"github.com/gin-gonic/gin"
-	_ "github.com/lib/pq"
+	"github.com/joho/godotenv"
 )
 
-type User struct {
-	ID   int    `json:"id"`
-	Name string `json:"name"`
-}
-
 func main() {
-	connStr := "host=localhost port=5432 user=admin password=password dbname=community sslmode=disable"
+	godotenv.Load()
 
-	db, err := sql.Open("postgres", connStr)
-	if err != nil {
-		panic(err)
-	}
+	cfg := config.LoadConfig()
+	db.Init(cfg)
 
 	r := gin.Default()
 
-	r.GET("/users", func(c *gin.Context) {
-		rows, err := db.Query("SELECT id, name FROM users")
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"error": err.Error(),
-			})
-			return
-		}
-		defer rows.Close()
-
-		var users []User
-
-		for rows.Next() {
-			var user User
-
-			rows.Scan(&user.ID, &user.Name)
-
-			users = append(users, user)
-		}
-
-		c.JSON(http.StatusOK, users)
-	})
+	router.RegisterUserRoutes(r)
 
 	r.Run(":18080")
 }
