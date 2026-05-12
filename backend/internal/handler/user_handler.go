@@ -14,11 +14,10 @@ func GetUserByID(c *gin.Context) {
 	id := c.Param("id")
 	users, err := service.GetUserByID(id)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		common.Error(c, http.StatusBadRequest, common.ErrInvalidParam)
 		return
 	}
-
-	c.JSON(http.StatusOK, users)
+	common.Success(c, users)
 }
 
 func CreateUser(c *gin.Context) {
@@ -59,8 +58,16 @@ func Login(c *gin.Context) {
 		common.Error(c, http.StatusBadRequest, common.ErrInvalidParam)
 		return
 	}
+	user, err := service.GetUserByEmail(req.Email)
+	if err != nil {
+		common.Error(c, http.StatusBadRequest, common.ErrInvalidParam)
+		return
+	}
 
-	common.Success(c, token)
+	common.Success(c, gin.H{
+		"token": token,
+		"user":  user,
+	})
 }
 
 func Me(c *gin.Context) {

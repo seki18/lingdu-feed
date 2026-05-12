@@ -1,15 +1,10 @@
 package common
 
-import "github.com/gin-gonic/gin"
+import (
+	"fmt"
+	"net/http"
 
-const (
-	HTTPOK                  = 200
-	HTTPBadRequest          = 400
-	HTTPUnauthorized        = 401
-	HTTPForbidden           = 403
-	HTTPNotFound            = 404
-	HTTPConflict            = 409
-	HTTPInternalServerError = 500
+	"github.com/gin-gonic/gin"
 )
 
 type Response struct {
@@ -19,8 +14,9 @@ type Response struct {
 }
 
 func Success(c *gin.Context, data any) {
-	c.JSON(HTTPOK, Response{
-		Code:    HTTPOK,
+	fmt.Println(data)
+	c.JSON(http.StatusOK, Response{
+		Code:    http.StatusOK,
 		Message: "success",
 		Data:    data,
 	})

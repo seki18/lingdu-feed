@@ -13,6 +13,10 @@ func GetUserByID(id string) (model.User, error) {
 	return repository.GetUserByID(id)
 }
 
+func GetUserByEmail(email string) (model.User, error) {
+	return repository.GetUserByEmail(email)
+}
+
 func CreateUser(req model.CreateUserRequest) (model.User, error) {
 	exist, _ := repository.GetUserByEmail(req.Email)
 	if exist.ID != 0 {
