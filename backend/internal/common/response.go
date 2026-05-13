@@ -23,8 +23,9 @@ func Success(c *gin.Context, data any) {
 }
 
 func Error(c *gin.Context, httpCode int, err *AppError) {
-	c.JSON(httpCode, gin.H{
-		"code":    err.Code,
-		"message": err.Message,
+	c.JSON(httpCode, Response{
+		Code:    int(err.Code),
+		Message: err.Message,
+		Data:    nil,
 	})
 }
