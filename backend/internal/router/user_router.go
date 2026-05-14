@@ -7,7 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func RegisterUserRoutes(r *gin.Engine) {
+func UserRoutes(r *gin.Engine) {
 	user := r.Group("/users")
 	{
 		user.GET("/:id", handler.GetUserByID)

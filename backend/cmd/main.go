@@ -36,7 +36,8 @@ func main() {
 		AllowCredentials: true,
 	}))
 
-	router.RegisterUserRoutes(r)
+	router.UserRoutes(r)
+	router.PostRoutes(r)
 
 	r.Run(":18080")
 }

@@ -5,7 +5,7 @@ import (
 	"community-backend/internal/model"
 )
 
-func GetUserByID(id string) (model.User, error) {
+func GetUserByID(id int) (model.User, error) {
 	var user model.User
 
 	err := common.DB.Get(&user, `

@@ -5,13 +5,14 @@ import (
 	"community-backend/internal/model"
 	"community-backend/internal/service"
 	"log"
+	"strconv"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
 )
 
 func GetUserByID(c *gin.Context) {
-	id := c.Param("id")
+	id, _ := strconv.Atoi(c.Param("id"))
 	users, err := service.GetUserByID(id)
 	if err != nil {
 		common.Error(c, http.StatusBadRequest, common.ErrInvalidParam)
@@ -56,11 +57,13 @@ func Login(c *gin.Context) {
 	token, err := service.Login(req.Email, req.Password)
 	if err != nil {
 		common.Error(c, http.StatusBadRequest, common.ErrInvalidParam)
+		log.Printf("Login:  %v\n", err)
 		return
 	}
 	user, err := service.GetUserByEmail(req.Email)
 	if err != nil {
 		common.Error(c, http.StatusBadRequest, common.ErrInvalidParam)
+		log.Printf("Login:  %v\n", err)
 		return
 	}
 

@@ -15,4 +15,4 @@ backend/*.exe
 
 # Docker volumes
 *.log
-.test
+test/

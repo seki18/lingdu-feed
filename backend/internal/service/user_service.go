@@ -9,7 +9,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-func GetUserByID(id string) (model.User, error) {
+func GetUserByID(id int) (model.User, error) {
 	return repository.GetUserByID(id)
 }
 

@@ -1,10 +1,10 @@
 package middleware
 
 import (
+	"community-backend/internal/utils"
+	"log"
 	"net/http"
 	"strings"
-
-	"community-backend/internal/utils"
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
@@ -17,6 +17,7 @@ func AuthMiddleware() gin.HandlerFunc {
 		if authHeader == "" {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "no token"})
 			c.Abort()
+			log.Printf("AuthMiddleware error: no token")
 			return
 		}
 
@@ -29,6 +30,7 @@ func AuthMiddleware() gin.HandlerFunc {
 		if err != nil || !token.Valid {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid token"})
 			c.Abort()
+			log.Printf("AuthMiddleware error: invalid token")
 			return
 		}
 
