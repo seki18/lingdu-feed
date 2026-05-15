@@ -3,6 +3,8 @@ package repository
 import (
 	"community-backend/internal/common"
 	"community-backend/internal/model"
+
+	"errors"
 )
 
 // GetPostByID retrieves a single post by primary key.
@@ -73,4 +75,29 @@ func GetPostsByUserID(userID int) ([]model.Posts, error) {
 	`, userID)
 
 	return posts, err
+}
+
+// DeletePostByID delete a single post by primary key.
+func DeletePostByID(id int64) error {
+	result, err := common.DB.Exec(`
+		DELETE
+		FROM posts
+		WHERE id = $1
+	`, id)
+
+	if err != nil {
+		return err
+	}
+
+	rows, err := result.RowsAffected()
+
+	if err != nil {
+		return err
+	}
+
+	if rows == 0 {
+		return errors.New("post not found")
+	}
+
+	return nil
 }

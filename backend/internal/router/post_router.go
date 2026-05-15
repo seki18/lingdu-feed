@@ -19,6 +19,7 @@ func PostRoutes(r *gin.Engine) {
 	{
 		postAuth.POST("", handler.CreatePost)
 		postAuth.PUT("", handler.UpdatePost)
+		postAuth.DELETE("/:id", handler.DeletePostByID)
 	}
 
 	posts := r.Group("/posts")

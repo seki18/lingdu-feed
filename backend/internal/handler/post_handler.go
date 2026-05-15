@@ -91,3 +91,19 @@ func GetRecentPosts(c *gin.Context) {
 	}
 	common.Success(c, posts)
 }
+
+// DeletePostByID handles DELETE /post/:id. Deletes a post or returns 404 if not found.
+func DeletePostByID(c *gin.Context) {
+	id, _ := strconv.Atoi(c.Param("id"))
+	err := service.DeletePostByID(int64(id))
+	if err != nil {
+		// Distinguish "not found" from other errors
+		if strings.Contains(err.Error(), "no rows") {
+			common.Error(c, http.StatusNotFound, common.ErrPostNotFound)
+			return
+		}
+		common.Error(c, http.StatusBadRequest, common.ErrInvalidParam.WithErr(err))
+		return
+	}
+	common.Success(c, nil)
+}

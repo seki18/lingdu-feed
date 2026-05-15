@@ -1,7 +1,6 @@
 package common
 
 import (
-	"fmt"
 	"log"
 	"net/http"
 
@@ -17,7 +16,6 @@ type Response struct {
 
 // Success sends a 200 OK response with the provided data.
 func Success(c *gin.Context, data any) {
-	fmt.Println(data)
 	c.JSON(http.StatusOK, Response{
 		Code:    http.StatusOK,
 		Message: "success",

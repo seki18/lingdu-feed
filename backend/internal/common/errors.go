@@ -82,4 +82,9 @@ var (
 		Code:    CodeInternalError,
 		Message: "An unexpected error occurred. Please try again later.",
 	}
+
+	ErrNotFound = &AppError{
+		Code:    CodeNotFound,
+		Message: "The requested resource does not exist or has been removed.",
+	}
 )

@@ -52,3 +52,8 @@ func GetRecentPosts() ([]model.Posts, error) {
 func GetPostsByUserID(userID int) ([]model.Posts, error) {
 	return repository.GetPostsByUserID(userID)
 }
+
+// DeletePostByID deletes a single post by its ID.
+func DeletePostByID(id int64) error {
+	return repository.DeletePostByID(id)
+}

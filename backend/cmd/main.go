@@ -38,6 +38,7 @@ func main() {
 
 	router.UserRoutes(r)
 	router.PostRoutes(r)
+	router.CommentRoutes(r)
 
 	r.Run(":18080")
 }
