@@ -7,17 +7,18 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// PostRoutes registers all post related routes.
 func PostRoutes(r *gin.Engine) {
 	post := r.Group("/post")
 	{
 		post.GET("/:id", handler.GetPostByID)
 	}
 
-	postValid := r.Group("/post")
-	postValid.Use(middleware.AuthMiddleware())
+	postAuth := r.Group("/post")
+	postAuth.Use(middleware.AuthMiddleware())
 	{
-		postValid.POST("", handler.CreatePost)
-		postValid.PUT("", handler.UpdatePost)
+		postAuth.POST("", handler.CreatePost)
+		postAuth.PUT("", handler.UpdatePost)
 	}
 
 	posts := r.Group("/posts")

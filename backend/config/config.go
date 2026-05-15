@@ -2,6 +2,7 @@ package config
 
 import "os"
 
+// Config holds all environment-based configuration values.
 type Config struct {
 	DBHost     string
 	DBPort     string
@@ -10,6 +11,7 @@ type Config struct {
 	DBName     string
 }
 
+// LoadConfig reads configuration from environment variables.
 func LoadConfig() Config {
 	return Config{
 		DBHost:     os.Getenv("DB_HOST"),

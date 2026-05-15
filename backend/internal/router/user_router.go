@@ -7,16 +7,17 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// UserRoutes registers all user and auth related routes.
 func UserRoutes(r *gin.Engine) {
 	user := r.Group("/users")
 	{
 		user.GET("/:id", handler.GetUserByID)
 	}
 
-	auth_valid := r.Group("/users")
-	auth_valid.Use(middleware.AuthMiddleware())
+	authValid := r.Group("/users")
+	authValid.Use(middleware.AuthMiddleware())
 	{
-		auth_valid.GET("/me", handler.Me)
+		authValid.GET("/me", handler.Me)
 	}
 
 	auth := r.Group("/auth")

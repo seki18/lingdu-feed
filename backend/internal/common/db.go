@@ -8,8 +8,10 @@ import (
 	_ "github.com/lib/pq"
 )
 
+// DB is the global database connection pool.
 var DB *sqlx.DB
 
+// Init initializes the PostgreSQL connection using the provided config.
 func Init(cfg config.Config) {
 	connStr := fmt.Sprintf(
 		"host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",

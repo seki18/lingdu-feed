@@ -9,40 +9,46 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
+// GetUserByID retrieves a user by their primary key ID.
 func GetUserByID(id int) (model.User, error) {
 	return repository.GetUserByID(id)
 }
 
+// GetUserByEmail retrieves a user by their email address.
 func GetUserByEmail(email string) (model.User, error) {
 	return repository.GetUserByEmail(email)
 }
 
+// CreateUser registers a new user with bcrypt-hashed password.
 func CreateUser(req model.CreateUserRequest) (model.User, error) {
 	exist, _ := repository.GetUserByEmail(req.Email)
 	if exist.ID != 0 {
 		return model.User{}, common.ErrEmailExists
 	}
 
-	// 1. 加密密码
 	hashedPwd, err := bcrypt.GenerateFromPassword([]byte(req.Password), 14)
 	if err != nil {
 		return model.User{}, err
 	}
 
-	user_create := model.User{
+	userCreate := model.User{
 		Username: req.Username,
 		Password: string(hashedPwd),
 		Email:    req.Email,
 	}
 
-	// 2. 写入数据库
-	return repository.CreateUser(user_create)
+	return repository.CreateUser(userCreate)
 }
 
+// Login verifies email/password and returns a signed JWT token.
 func Login(email, password string) (string, error) {
 	user, err := repository.GetUserByEmail(email)
 	if err != nil {
-		return "", err
+		return "", common.ErrUserNotFound
+	}
+
+	if user.ID == 0 {
+		return "", common.ErrUserNotFound
 	}
 
 	err = bcrypt.CompareHashAndPassword(
@@ -50,10 +56,9 @@ func Login(email, password string) (string, error) {
 		[]byte(password),
 	)
 	if err != nil {
-		return "", err
+		return "", common.ErrPasswordError
 	}
 
-	// 生成 JWT
 	token, err := utils.GenerateToken(user.ID)
 	if err != nil {
 		return "", err

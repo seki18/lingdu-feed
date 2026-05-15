@@ -10,6 +10,8 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
+// AuthMiddleware returns a Gin middleware that validates JWT tokens.
+// It extracts the user ID from the token and stores it in the context.
 func AuthMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		authHeader := c.GetHeader("Authorization")
@@ -17,7 +19,7 @@ func AuthMiddleware() gin.HandlerFunc {
 		if authHeader == "" {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "no token"})
 			c.Abort()
-			log.Printf("AuthMiddleware error: no token")
+			log.Printf("AuthMiddleware: missing Authorization header")
 			return
 		}
 
@@ -30,13 +32,12 @@ func AuthMiddleware() gin.HandlerFunc {
 		if err != nil || !token.Valid {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid token"})
 			c.Abort()
-			log.Printf("AuthMiddleware error: invalid token")
+			log.Printf("AuthMiddleware: invalid token (%v)", err)
 			return
 		}
 
 		claims := token.Claims.(*utils.Claims)
-
-		// 把 user_id 放进上下文
+		// Store user ID in context for downstream handlers
 		c.Set("user_id", claims.UserID)
 
 		c.Next()

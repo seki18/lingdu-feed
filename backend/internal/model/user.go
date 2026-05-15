@@ -2,6 +2,7 @@ package model
 
 import "time"
 
+// User represents a user row in the database. Password is omitted from JSON output.
 type User struct {
 	ID          int       `db:"id" json:"id"`
 	Username    string    `db:"username" json:"username"`
@@ -10,6 +11,7 @@ type User struct {
 	CreatedTime time.Time `db:"created_time" json:"created_time"`
 }
 
+// CreateUserRequest is the JSON body for POST /auth/register.
 type CreateUserRequest struct {
 	Username string `json:"username"`
 	Password string `json:"password"`

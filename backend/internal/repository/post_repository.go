@@ -5,6 +5,7 @@ import (
 	"community-backend/internal/model"
 )
 
+// GetPostByID retrieves a single post by primary key.
 func GetPostByID(id int) (model.Post, error) {
 	var post model.Post
 
@@ -17,6 +18,7 @@ func GetPostByID(id int) (model.Post, error) {
 	return post, err
 }
 
+// CreatePost inserts a new post and returns the created record.
 func CreatePost(post model.Post) (model.Post, error) {
 	err := common.DB.QueryRowx(`
 		INSERT INTO posts (user_id, title, content, created_time, updated_time)
@@ -28,6 +30,7 @@ func CreatePost(post model.Post) (model.Post, error) {
 	return post, err
 }
 
+// UpdatePost updates an existing post and returns the updated record.
 func UpdatePost(post model.Post) (model.Post, error) {
 	err := common.DB.QueryRowx(`
 		UPDATE posts
@@ -40,6 +43,7 @@ func UpdatePost(post model.Post) (model.Post, error) {
 	return post, err
 }
 
+// GetRecentPosts returns the most recent posts with author usernames.
 func GetRecentPosts() ([]model.Posts, error) {
 	var posts []model.Posts
 
@@ -51,6 +55,22 @@ func GetRecentPosts() ([]model.Posts, error) {
 		ORDER BY created_time DESC
 		LIMIT 5
 	`)
+
+	return posts, err
+}
+
+// GetPostsByUserID returns all posts authored by the given user, newest first.
+func GetPostsByUserID(userID int) ([]model.Posts, error) {
+	var posts []model.Posts
+
+	err := common.DB.Select(&posts, `
+		SELECT p.id, p.user_id, u.username, p.title, p.created_time
+		FROM posts as p
+		LEFT JOIN users as u
+		ON p.user_id = u.id
+		WHERE p.user_id = $1
+		ORDER BY created_time DESC
+	`, userID)
 
 	return posts, err
 }

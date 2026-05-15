@@ -5,6 +5,7 @@ import (
 	"community-backend/internal/model"
 )
 
+// GetUserByID retrieves a single user by primary key.
 func GetUserByID(id int) (model.User, error) {
 	var user model.User
 
@@ -17,6 +18,7 @@ func GetUserByID(id int) (model.User, error) {
 	return user, err
 }
 
+// GetUserByEmail retrieves a user by their email address.
 func GetUserByEmail(email string) (model.User, error) {
 	var user model.User
 
@@ -29,6 +31,7 @@ func GetUserByEmail(email string) (model.User, error) {
 	return user, err
 }
 
+// CreateUser inserts a new user and returns the created record.
 func CreateUser(user model.User) (model.User, error) {
 	err := common.DB.QueryRowx(`
 		INSERT INTO users (username, password, email, created_time)
