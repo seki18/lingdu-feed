@@ -5,11 +5,6 @@ import (
 	"community-backend/internal/repository"
 )
 
-// GetPraiseByID retrieves a single Praise by its ID.
-func GetPraiseByID(id int) (model.Praise, error) {
-	return repository.GetPraiseByID(id)
-}
-
 // IsPraiseExist checks if a Praise already exists for the given user_id and post_id.
 func IsPraiseExist(req model.CreatePraiseRequest) (bool, error) {
 	Praise := model.Praise{

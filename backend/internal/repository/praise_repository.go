@@ -8,19 +8,6 @@ import (
 	"errors"
 )
 
-// GetPraiseByID retrieves a single Praise by primary key.
-func GetPraiseByID(id int) (model.Praise, error) {
-	var Praise model.Praise
-
-	err := common.DB.Get(&Praise, `
-		SELECT user_id, post_id, created_time
-		FROM praises
-		WHERE id = $1
-	`, id)
-
-	return Praise, err
-}
-
 func IsPraiseExist(praise model.Praise) (bool, error) {
 	var exists bool
 	err := common.DB.Get(&exists, `

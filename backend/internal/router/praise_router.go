@@ -12,7 +12,6 @@ func PraiseRoutes(r *gin.Engine) {
 	praise := r.Group("/Praises")
 	{
 		praise.GET("/count/:postId", handler.GetPraiseCountByPostID)
-		praise.GET("/:id", handler.GetPraiseByID)
 	}
 
 	praiseAuth := r.Group("/Praises")

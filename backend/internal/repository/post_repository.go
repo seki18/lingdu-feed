@@ -51,12 +51,13 @@ func GetRecentPosts(count int, excludeIDs []int) ([]model.Posts, error) {
 	var posts []model.Posts
 
 	query := `
-		SELECT p.id, p.user_id, u.username, p.title, s.status, p.created_time
+		SELECT p.id, p.user_id, u.username, p.title, COALESCE(s.status, 0) as status, p.created_time
 		FROM posts as p
 		LEFT JOIN users as u
 		ON p.user_id = u.id
 		LEFT JOIN interaction_status as s
 		ON p.id = s.post_id
+		AND p.user_id = s.user_id
 		WHERE s.status IS NULL OR s.status <= ?`
 	args := []any{model.FeedDisplay}
 
@@ -81,10 +82,17 @@ func GetRecentPosts(count int, excludeIDs []int) ([]model.Posts, error) {
 	return posts, err
 }
 
-// GetPostsByUserID returns all posts authored by the given user, newest first.
-func GetPostsByUserID(userID int) ([]model.Posts, error) {
+// GetPostsByUserID returns posts authored by the given user, newest first, with pagination.
+func GetPostsByUserID(userID int, page, pageSize int) ([]model.Posts, int, error) {
 	var posts []model.Posts
+	var total int
 
+	// Count total
+	if err := common.DB.Get(&total, `SELECT COUNT(1) FROM posts WHERE user_id = $1`, userID); err != nil {
+		return nil, 0, err
+	}
+
+	offset := (page - 1) * pageSize
 	err := common.DB.Select(&posts, `
 		SELECT p.id, p.user_id, u.username, p.title, p.created_time
 		FROM posts as p
@@ -92,9 +100,10 @@ func GetPostsByUserID(userID int) ([]model.Posts, error) {
 		ON p.user_id = u.id
 		WHERE p.user_id = $1
 		ORDER BY created_time DESC
-	`, userID)
+		LIMIT $2 OFFSET $3
+	`, userID, pageSize, offset)
 
-	return posts, err
+	return posts, total, err
 }
 
 // DeletePostByID delete a single post by primary key.

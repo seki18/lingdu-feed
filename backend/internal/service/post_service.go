@@ -49,7 +49,7 @@ func GetRecentPosts(requestType string, excludeIDs []int) ([]model.Posts, error)
 	count := 3
 	switch requestType {
 	case "initial", "refresh":
-		count = 6
+		count = 5
 	case "subsequent", "next", "more":
 		count = 2
 	default:
@@ -60,7 +60,7 @@ func GetRecentPosts(requestType string, excludeIDs []int) ([]model.Posts, error)
 	if err != nil {
 		return nil, err
 	}
-	log.Printf("[GetRecentPosts] Request type=%s count=%d fetched=%d excludeIDs=%v", requestType, count, len(posts), excludeIDs)
+	log.Printf("[GetRecentPosts] Request type=%s count=%d fetched=%d excludeIDs=%v posts: %+v", requestType, count, len(posts), excludeIDs, posts)
 	if len(posts) > count {
 		for i := len(posts) - 1; i >= 0; i-- {
 			if len(posts) <= count {
@@ -72,13 +72,13 @@ func GetRecentPosts(requestType string, excludeIDs []int) ([]model.Posts, error)
 			}
 		}
 	}
-	log.Printf("[GetRecentPosts] Returning %d posts after filtering, count: %d", len(posts), count)
+	log.Printf("[GetRecentPosts] Returning %d posts after filtering, count: %d posts: %+v", len(posts), count, posts)
 	return posts, nil
 }
 
-// GetPostsByUserID returns all posts authored by the given user.
-func GetPostsByUserID(userID int) ([]model.Posts, error) {
-	return repository.GetPostsByUserID(userID)
+// GetPostsByUserID returns all posts authored by the given user, with pagination.
+func GetPostsByUserID(userID int, page, pageSize int) ([]model.Posts, int, error) {
+	return repository.GetPostsByUserID(userID, page, pageSize)
 }
 
 // DeletePostByID deletes a single post by its ID.

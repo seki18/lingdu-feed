@@ -40,6 +40,8 @@ func main() {
 	router.PostRoutes(r)
 	router.CommentRoutes(r)
 	router.PraiseRoutes(r)
+	router.CollectionRoutes(r)
+	router.HistoryRoutes(r)
 	router.InteractionStatusRoutes(r)
 
 	r.Run(":18080")

@@ -12,22 +12,6 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// GetPraiseByID handles GET /Praise/:id. Returns Praise details or 404 if not found.
-func GetPraiseByID(c *gin.Context) {
-	id, _ := strconv.Atoi(c.Param("id"))
-	Praises, err := service.GetPraiseByID(id)
-	if err != nil {
-		// Distinguish "not found" from other errors
-		if strings.Contains(err.Error(), "no rows") {
-			common.Error(c, http.StatusNotFound, common.ErrNotFound)
-			return
-		}
-		common.Error(c, http.StatusBadRequest, common.ErrInvalidParam.WithErr(err))
-		return
-	}
-	common.Success(c, Praises)
-}
-
 // IsPraiseExist handles POST /Praises/exist (auth required). Checks if a praise exists for a given post and user.
 func IsPraiseExist(c *gin.Context) {
 	var req model.CreatePraiseRequest

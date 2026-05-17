@@ -80,12 +80,14 @@ func GetRecentPosts(c *gin.Context) {
 			return
 		}
 		log.Printf("[GetPostsByUserID] Request: user_id=%d", userID)
-		posts, err := service.GetPostsByUserID(userID)
+		page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+		pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "10"))
+		posts, total, err := service.GetPostsByUserID(userID, page, pageSize)
 		if err != nil {
 			common.Error(c, http.StatusBadRequest, common.ErrInvalidParam.WithErr(err))
 			return
 		}
-		common.Success(c, posts)
+		common.Success(c, gin.H{"items": posts, "total": total, "page": page, "page_size": pageSize})
 		return
 	}
 
