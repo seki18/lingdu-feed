@@ -37,10 +37,10 @@ func CreateComment(c *gin.Context) {
 		common.Error(c, http.StatusBadRequest, common.ErrInvalidParam.WithErr(err))
 		return
 	}
-	log.Printf("[CreateComment] Request: post_id=%d content=%q reply_id=%v", req.PostID, req.Content, req.ReplyID)
-
 	userID, _ := c.Get("user_id")
 	req.UserID = userID.(int)
+	log.Printf("[CreateComment] Request: post_id=%d user_id=%d content=%q reply_id=%v", req.PostID, req.UserID, req.Content, req.ReplyID)
+
 	comment, err := service.CreateComment(req)
 	if err != nil {
 		log.Printf("[CreateComment] Service error: %v", err)
@@ -75,7 +75,12 @@ func DeleteCommentByID(c *gin.Context) {
 		common.Error(c, http.StatusBadRequest, common.ErrInvalidParam)
 		return
 	}
-	err = service.DeleteCommentByID(id)
+	userID, _ := c.Get("user_id")
+	req := model.DeleteCommentRequest{
+		PostID:  id,
+		UserID:  userID.(int),
+	}
+	err = service.DeleteCommentByID(req)
 	if err != nil {
 		// Distinguish "not found" from other errors
 		if strings.Contains(err.Error(), "comment not found") {

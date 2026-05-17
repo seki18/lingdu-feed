@@ -25,5 +25,6 @@ func PostRoutes(r *gin.Engine) {
 	posts := r.Group("/posts")
 	{
 		posts.GET("", handler.GetRecentPosts)
+		posts.GET("/:count", handler.GetRecentPosts)
 	}
 }

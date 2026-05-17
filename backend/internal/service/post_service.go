@@ -5,6 +5,7 @@ import (
 	"community-backend/internal/repository"
 
 	"errors"
+	"log"
 )
 
 // GetPostByID retrieves a single post by its ID.
@@ -43,9 +44,36 @@ func UpdatePost(req model.UpdatePostRequest) (model.Post, error) {
 	return repository.UpdatePost(postUpdate)
 }
 
-// GetRecentPosts returns all posts ordered by creation time descending.
-func GetRecentPosts() ([]model.Posts, error) {
-	return repository.GetRecentPosts()
+// GetRecentPosts returns posts ordered by creation time descending with request type controlling count.
+func GetRecentPosts(requestType string, excludeIDs []int) ([]model.Posts, error) {
+	count := 3
+	switch requestType {
+	case "initial", "refresh":
+		count = 6
+	case "subsequent", "next", "more":
+		count = 2
+	default:
+		count = 2
+	}
+
+	posts, err := repository.GetRecentPosts(count, excludeIDs)
+	if err != nil {
+		return nil, err
+	}
+	log.Printf("[GetRecentPosts] Request type=%s count=%d fetched=%d excludeIDs=%v", requestType, count, len(posts), excludeIDs)
+	if len(posts) > count {
+		for i := len(posts) - 1; i >= 0; i-- {
+			if len(posts) <= count {
+				break
+			}
+			log.Printf("[GetRecentPosts] Checking post ID %d with status %d", posts[i].ID, posts[i].Status)
+			if posts[i].Status >= model.FeedDisplay {
+				posts = append(posts[:i], posts[i+1:]...)
+			}
+		}
+	}
+	log.Printf("[GetRecentPosts] Returning %d posts after filtering, count: %d", len(posts), count)
+	return posts, nil
 }
 
 // GetPostsByUserID returns all posts authored by the given user.

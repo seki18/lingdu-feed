@@ -40,6 +40,7 @@ func main() {
 	router.PostRoutes(r)
 	router.CommentRoutes(r)
 	router.PraiseRoutes(r)
+	router.InteractionStatusRoutes(r)
 
 	r.Run(":18080")
 }

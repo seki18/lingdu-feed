@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"fmt"
 	"community-backend/internal/common"
 	"community-backend/internal/model"
 
@@ -20,7 +21,7 @@ func GetPraiseByID(id int) (model.Praise, error) {
 	return Praise, err
 }
 
-func IsPraiseExist(Praise model.Praise) (bool, error) {
+func IsPraiseExist(praise model.Praise) (bool, error) {
 	var exists bool
 	err := common.DB.Get(&exists, `
 		SELECT EXISTS (
@@ -28,30 +29,30 @@ func IsPraiseExist(Praise model.Praise) (bool, error) {
 			FROM praises
 			WHERE user_id = $1 AND post_id = $2
 		)
-	`, Praise.UserID, Praise.PostID)
+	`, praise.UserID, praise.PostID)
 	return exists, err
 }
 
 // CreatePraise inserts a new Praise and returns the created record.
-func CreatePraise(Praise model.Praise) (model.Praise, error) {
+func CreatePraise(praise model.Praise) (model.Praise, error) {
 	err := common.DB.QueryRowx(`
 		INSERT INTO praises (post_id, user_id, created_time)
 		VALUES ($1, $2, NOW())
 		RETURNING user_id, post_id, created_time
-	`, Praise.PostID, Praise.UserID).
-		StructScan(&Praise)
+	`, praise.PostID, praise.UserID).
+		StructScan(&praise)
 
-	return Praise, err
+	return praise, err
 }
 
 // DeletePraise delete praise by primary key.
-func DeletePraise(Praise model.Praise) error {
+func DeletePraise(praise model.Praise) error {
 	result, err := common.DB.Exec(`
 		DELETE
 		FROM praises
 		WHERE user_id = $1
 		AND post_id = $2
-	`, Praise.UserID, Praise.PostID)
+	`, praise.UserID, praise.PostID)
 
 	if err != nil {
 		return err
@@ -64,7 +65,7 @@ func DeletePraise(Praise model.Praise) error {
 	}
 
 	if rows == 0 {
-		return errors.New("praise not found")
+		return errors.New("praise not found, user_id: " + fmt.Sprint(praise.UserID) + ", post_id: " + fmt.Sprint(praise.PostID))
 	}
 
 	return nil

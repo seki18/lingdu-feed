@@ -33,5 +33,6 @@ type Posts struct {
 	UserID      int       `db:"user_id" json:"user_id"`
 	Username    string    `db:"username" json:"username"`
 	Title       string    `db:"title" json:"title"`
+	Status	  	FeedStatus`db:"status" json:"-"`
 	CreatedTime time.Time `db:"created_time" json:"created_time"`
 }

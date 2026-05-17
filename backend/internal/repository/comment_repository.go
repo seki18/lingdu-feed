@@ -9,9 +9,9 @@ import (
 
 // GetCommentByID retrieves a single Comment by primary key.
 func GetCommentByID(id int) (model.Comment, error) {
-	var Comment model.Comment
+	var comment model.Comment
 
-	err := common.DB.Get(&Comment, `
+	err := common.DB.Get(&comment, `
 		SELECT c.id, c.post_id, c.user_id, u.username, c.reply_id,
 		       ru.username AS reply_username, c.content, c.created_time
 		FROM comments c
@@ -20,24 +20,24 @@ func GetCommentByID(id int) (model.Comment, error) {
 		WHERE c.id = $1
 	`, id)
 
-	return Comment, err
+	return comment, err
 }
 
 // CreateComment inserts a new Comment and returns the created record.
-func CreateComment(Comment model.Comment) (model.Comment, error) {
+func CreateComment(comment model.Comment) (model.Comment, error) {
 	err := common.DB.QueryRowx(`
 		INSERT INTO comments (post_id, user_id, reply_id, content, created_time)
 		VALUES ($1, $2, $3, $4, NOW())
 		RETURNING id, post_id, user_id, reply_id, content, created_time
-	`, Comment.PostID, Comment.UserID, Comment.ReplyID, Comment.Content).
-		StructScan(&Comment)
+	`, comment.PostID, comment.UserID, comment.ReplyID, comment.Content).
+		StructScan(&comment)
 
 	// Populate username with a follow-up query
 	var username string
-	_ = common.DB.Get(&username, `SELECT username FROM users WHERE id = $1`, Comment.UserID)
-	Comment.Username = username
+	_ = common.DB.Get(&username, `SELECT username FROM users WHERE id = $1`, comment.UserID)
+	comment.Username = username
 
-	return Comment, err
+	return comment, err
 }
 
 // GetCommentsByPostID retrieves all comments for a given post, ordered by creation time.
@@ -58,13 +58,13 @@ func GetCommentsByPostID(postID int) ([]model.Comment, error) {
 }
 
 // DeleteCommentByID deletes a comment by its ID. If the comment has replies, they will also be deleted.
-func DeleteCommentByID(id int) error {
+func DeleteCommentByID(comment model.Comment) error {
 	result, err := common.DB.Exec(`
 		DELETE
 		FROM comments
-		WHERE id = $1 
+		WHERE id = $1 AND user_id = $2
 		OR reply_id = $1
-	`, id)
+	`, comment.ID, comment.UserID)
 	if err != nil {
 		return err
 	}

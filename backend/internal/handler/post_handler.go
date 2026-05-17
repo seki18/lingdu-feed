@@ -4,6 +4,7 @@ import (
 	"community-backend/internal/common"
 	"community-backend/internal/model"
 	"community-backend/internal/service"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -37,6 +38,8 @@ func CreatePost(c *gin.Context) {
 	}
 	userID, _ := c.Get("user_id")
 	req.UserID = userID.(int)
+	log.Printf("[CreatePost] Request: user_id=%d, title=%s, content=%s", req.UserID, req.Title, req.Content)
+
 	post, err := service.CreatePost(req)
 	if err != nil {
 		common.Error(c, http.StatusInternalServerError, common.ErrInternalParam.WithErr(err))
@@ -56,6 +59,7 @@ func UpdatePost(c *gin.Context) {
 	}
 	userID, _ := c.Get("user_id")
 	req.UserID = userID.(int)
+	log.Printf("[UpdatePost] Request: id=%d, user_id=%d, title=%s, content=%s", req.ID, req.UserID, req.Title, req.Content)
 	post, err := service.UpdatePost(req)
 	if err != nil {
 		common.Error(c, http.StatusInternalServerError, common.ErrInternalParam.WithErr(err))
@@ -75,6 +79,7 @@ func GetRecentPosts(c *gin.Context) {
 			common.Error(c, http.StatusBadRequest, common.ErrInvalidParam)
 			return
 		}
+		log.Printf("[GetPostsByUserID] Request: user_id=%d", userID)
 		posts, err := service.GetPostsByUserID(userID)
 		if err != nil {
 			common.Error(c, http.StatusBadRequest, common.ErrInvalidParam.WithErr(err))
@@ -84,7 +89,29 @@ func GetRecentPosts(c *gin.Context) {
 		return
 	}
 
-	posts, err := service.GetRecentPosts()
+	requestType := c.Query("request_type")
+	if requestType == "" {
+		requestType = "subsequent"
+	}
+
+	excludeIDs := []int{}
+	if currentIDs := c.Query("current_ids"); currentIDs != "" {
+		for _, idStr := range strings.Split(currentIDs, ",") {
+			idStr = strings.TrimSpace(idStr)
+			if idStr == "" {
+				continue
+			}
+			id, err := strconv.Atoi(idStr)
+			if err != nil || id <= 0 {
+				common.Error(c, http.StatusBadRequest, common.ErrInvalidParam)
+				return
+			}
+			excludeIDs = append(excludeIDs, id)
+		}
+	}
+
+	log.Printf("[GetRecentPosts] Request: request_type=%s exclude_ids=%v", requestType, excludeIDs)
+	posts, err := service.GetRecentPosts(requestType, excludeIDs)
 	if err != nil {
 		common.Error(c, http.StatusBadRequest, common.ErrInvalidParam.WithErr(err))
 		return
@@ -95,6 +122,7 @@ func GetRecentPosts(c *gin.Context) {
 // DeletePostByID handles DELETE /post/:id. Deletes a post or returns 404 if not found.
 func DeletePostByID(c *gin.Context) {
 	id, _ := strconv.Atoi(c.Param("id"))
+	log.Printf("[DeletePostByID] Request: id=%d", id)
 	err := service.DeletePostByID(int64(id))
 	if err != nil {
 		// Distinguish "not found" from other errors

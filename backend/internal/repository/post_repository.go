@@ -3,8 +3,9 @@ package repository
 import (
 	"community-backend/internal/common"
 	"community-backend/internal/model"
-
 	"errors"
+
+	"github.com/jmoiron/sqlx"
 )
 
 // GetPostByID retrieves a single post by primary key.
@@ -46,18 +47,37 @@ func UpdatePost(post model.Post) (model.Post, error) {
 }
 
 // GetRecentPosts returns the most recent posts with author usernames.
-func GetRecentPosts() ([]model.Posts, error) {
+func GetRecentPosts(count int, excludeIDs []int) ([]model.Posts, error) {
 	var posts []model.Posts
 
-	err := common.DB.Select(&posts, `
-		SELECT p.id, p.user_id, u.username, p.title, p.created_time
+	query := `
+		SELECT p.id, p.user_id, u.username, p.title, s.status, p.created_time
 		FROM posts as p
 		LEFT JOIN users as u
 		ON p.user_id = u.id
-		ORDER BY created_time DESC
-		LIMIT 5
-	`)
+		LEFT JOIN interaction_status as s
+		ON p.id = s.post_id
+		WHERE s.status IS NULL OR s.status <= ?`
+	args := []any{model.FeedDisplay}
 
+	if len(excludeIDs) > 0 {
+		query += ` AND p.id NOT IN (?)`
+		args = append(args, excludeIDs)
+	}
+
+	query += `
+		ORDER BY created_time DESC
+		LIMIT ?
+	`
+	args = append(args, count+3)
+
+	query, args, err := sqlx.In(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	query = common.DB.Rebind(query)
+
+	err = common.DB.Select(&posts, query, args...)
 	return posts, err
 }
 

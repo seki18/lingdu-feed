@@ -37,9 +37,9 @@ func IsPraiseExist(c *gin.Context) {
 		common.Error(c, http.StatusBadRequest, common.ErrInvalidParam.WithErr(err))
 		return
 	}
-	log.Printf("[IsPraiseExist] Request: post_id=%d", req.PostID)
 	userID, _ := c.Get("user_id")
 	req.UserID = userID.(int)
+	log.Printf("[IsPraiseExist] Request: post_id=%d, user_id=%d", req.PostID, req.UserID)
 
 	exist, err := service.IsPraiseExist(req)
 	if err != nil {
@@ -58,10 +58,10 @@ func CreatePraise(c *gin.Context) {
 		common.Error(c, http.StatusBadRequest, common.ErrInvalidParam.WithErr(err))
 		return
 	}
-	log.Printf("[CreatePraise] Request: post_id=%d", req.PostID)
-
 	userID, _ := c.Get("user_id")
 	req.UserID = userID.(int)
+	log.Printf("[CreatePraise] Request: post_id=%d, user_id=%d", req.PostID, req.UserID)
+	
 	Praise, err := service.CreatePraise(req)
 	if err != nil {
 		log.Printf("[CreatePraise] Service error: %v", err)
@@ -81,7 +81,10 @@ func DeletePraise(c *gin.Context) {
 		common.Error(c, http.StatusBadRequest, common.ErrInvalidParam.WithErr(err))
 		return
 	}
-	log.Printf("[DeletePraise] Request: post_id=%d", req.PostID)
+	userID, _ := c.Get("user_id")
+	req.UserID = userID.(int)
+	log.Printf("[DeletePraise] Request: post_id=%d, user_id=%d", req.PostID, req.UserID)
+
 	err := service.DeletePraise(req)
 	if err != nil {
 		// Distinguish "not found" from other errors

@@ -21,3 +21,9 @@ type CreateCommentRequest struct {
 	ReplyID *int   `json:"reply_id"`
 	Content string `json:"content"`
 }
+
+// DeleteCommentRequest is the JSON body for DELETE /comments.
+type DeleteCommentRequest struct {
+	PostID  int    `json:"post_id"`
+	UserID int `json:"user_id"`
+}
