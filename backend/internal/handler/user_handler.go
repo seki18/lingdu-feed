@@ -83,3 +83,24 @@ func Me(c *gin.Context) {
 	userID, _ := c.Get("user_id")
 	common.Success(c, userID)
 }
+
+// UpdateUser handles PUT /users (auth required). Updates the current user's username.
+func UpdateUsername(c *gin.Context) {
+	var req model.UpdateUserRequest
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		common.Error(c, http.StatusBadRequest, common.ErrInvalidParam.WithErr(err))
+		return
+	}
+	userID, _ := c.Get("user_id")
+	req.ID = userID.(int)
+	log.Printf("[UpdateUsername] Request: user_id=%d, new_username=%s", req.ID, req.Username)
+
+	user, err := service.UpdateUsername(req)
+	if err != nil {
+		log.Printf("[UpdateUsername] Service error: %v", err)
+		common.Error(c, http.StatusInternalServerError, common.ErrInternalParam.WithErr(err))
+		return
+	}
+	common.Success(c, user)
+}

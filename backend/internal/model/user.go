@@ -17,3 +17,8 @@ type CreateUserRequest struct {
 	Password string `json:"password"`
 	Email    string `json:"email"`
 }
+
+// UpdateUserRequest is the JSON body for PUT /users.
+type UpdateUserRequest struct {
+	Username string `json:"username"`
+}

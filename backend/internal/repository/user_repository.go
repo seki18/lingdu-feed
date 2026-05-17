@@ -42,3 +42,16 @@ func CreateUser(user model.User) (model.User, error) {
 
 	return user, err
 }
+
+// UpdateUserName updates the username of an existing user and returns the updated record.
+func UpdateUserName(user model.User) (model.User, error) {
+	err := common.DB.QueryRowx(`
+		UPDATE users
+		SET username = $2
+		WHERE id = $1
+		RETURNING id, username, email, created_time
+	`, user.ID, user.Username).
+		StructScan(&user)
+
+	return user, err
+}

@@ -66,3 +66,12 @@ func Login(email, password string) (string, error) {
 
 	return token, nil
 }
+
+// UpdateUsername updates the username of an existing user.
+func UpdateUsername(req model.UpdateUserRequest) (model.User, error) {
+	userUpdate := model.User{
+		ID:       req.ID,
+		Username: req.Username,
+	}
+	return repository.UpdateUserName(userUpdate)
+}

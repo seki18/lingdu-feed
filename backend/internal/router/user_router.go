@@ -18,6 +18,7 @@ func UserRoutes(r *gin.Engine) {
 	authValid.Use(middleware.AuthMiddleware())
 	{
 		authValid.GET("/me", handler.Me)
+		authValid.PUT("", handler.UpdateUsername)
 	}
 
 	auth := r.Group("/auth")
