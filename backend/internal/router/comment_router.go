@@ -9,15 +9,17 @@ import (
 
 // CommentRoutes registers all Comment related routes.
 func CommentRoutes(r *gin.Engine) {
-	Comment := r.Group("/comments")
+	comment := r.Group("/comments")
 	{
-		Comment.GET("/by-post/:postId", handler.GetCommentsByPost)
-		Comment.GET("/:id", handler.GetCommentByID)
+		comment.GET("/by-post/:postId", handler.GetCommentsByPost)
+		comment.GET("/:id", handler.GetCommentByID)
+		comment.GET("/count/:postId", handler.GetCommentCountByPostID)
 	}
 
-	CommentAuth := r.Group("/comments")
-	CommentAuth.Use(middleware.AuthMiddleware())
+	commentAuth := r.Group("/comments")
+	commentAuth.Use(middleware.AuthMiddleware())
 	{
-		CommentAuth.POST("", handler.CreateComment)
+		commentAuth.POST("", handler.CreateComment)
+		commentAuth.DELETE("/:id", handler.DeleteCommentByID)
 	}
 }

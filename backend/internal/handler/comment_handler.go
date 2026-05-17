@@ -67,3 +67,40 @@ func GetCommentsByPost(c *gin.Context) {
 
 	common.Success(c, comments)
 }
+
+// DeleteCommentByID handles DELETE /comments/:id (auth required). Deletes a comment and its replies.
+func DeleteCommentByID(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil || id <= 0 {
+		common.Error(c, http.StatusBadRequest, common.ErrInvalidParam)
+		return
+	}
+	err = service.DeleteCommentByID(id)
+	if err != nil {
+		// Distinguish "not found" from other errors
+		if strings.Contains(err.Error(), "comment not found") {
+			common.Error(c, http.StatusNotFound, common.ErrNotFound)
+			return
+		}
+		common.Error(c, http.StatusInternalServerError, common.ErrInternalParam.WithErr(err))
+		return
+	}
+	common.Success(c, nil)
+}
+
+// GetCommentCountByPostID handles GET /comments/count/:postId. Returns the total number of comments for a post.
+func GetCommentCountByPostID(c *gin.Context) {
+	postID, err := strconv.Atoi(c.Param("postId"))
+	if err != nil || postID <= 0 {
+		common.Error(c, http.StatusBadRequest, common.ErrInvalidParam)
+		return
+	}
+
+	count, err := service.GetCommentCountByPostID(postID)
+	if err != nil {
+		common.Error(c, http.StatusInternalServerError, common.ErrInternalParam.WithErr(err))
+		return
+	}
+
+	common.Success(c, gin.H{"count": count})
+}

@@ -29,3 +29,13 @@ func CreateComment(req model.CreateCommentRequest) (model.Comment, error) {
 func GetCommentsByPostID(postID int) ([]model.Comment, error) {
 	return repository.GetCommentsByPostID(postID)
 }
+
+// DeleteCommentByID deletes a comment by its ID. If the comment has replies, they will also be deleted.
+func DeleteCommentByID(id int) error {
+	return repository.DeleteCommentByID(id)
+}
+
+// GetCommentCountByPostID returns the total number of comments for a given post.
+func GetCommentCountByPostID(postID int) (int, error) {
+	return repository.GetCommentCountByPostID(postID)
+}
