@@ -5,7 +5,6 @@ frontend/.next/
 
 # Go
 backend/bin/
-backend/migrations/
 backend/*.exe
 
 # env
