@@ -26,15 +26,34 @@ func Success(c *gin.Context, data any) {
 // Error logs the original error (if any) to the backend terminal and sends
 // a user-friendly JSON error response to the frontend.
 func Error(c *gin.Context, httpCode int, err *AppError) {
+	log.Printf("[ERROR %d] code=%d message=%q", httpCode, int(err.Code), err.Message)
 	if err.Err != nil {
-		log.Printf("[ERROR %d] %s | Original error: %v", err.Code, err.Message, err.Err)
-	} else {
-		log.Printf("[ERROR %d] %s", err.Code, err.Message)
+		log.Printf("[ERROR %d] cause: %v", httpCode, err.Err)
 	}
-
 	c.JSON(httpCode, Response{
 		Code:    int(err.Code),
 		Message: err.Message,
-		Data:    nil,
+	})
+}
+
+// PaginatedResponse wraps a paginated list with total count, page and page size.
+type PaginatedResponse struct {
+	Items    any `json:"items"`
+	Total    int `json:"total"`
+	Page     int `json:"page"`
+	PageSize int `json:"page_size"`
+}
+
+// SuccessPaginated sends a 200 OK paginated response.
+func SuccessPaginated(c *gin.Context, items any, total, page, pageSize int) {
+	c.JSON(http.StatusOK, Response{
+		Code:    http.StatusOK,
+		Message: "success",
+		Data: PaginatedResponse{
+			Items:    items,
+			Total:    total,
+			Page:     page,
+			PageSize: pageSize,
+		},
 	})
 }

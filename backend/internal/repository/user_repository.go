@@ -1,20 +1,17 @@
 package repository
 
 import (
-	"community-backend/internal/common"
-	"community-backend/internal/model"
+	"github.com/seki18/lingdu-feed/internal/common"
+	"github.com/seki18/lingdu-feed/internal/model"
 )
 
 // GetUserByID retrieves a single user by primary key.
 func GetUserByID(id int) (model.User, error) {
 	var user model.User
-
 	err := common.DB.Get(&user, `
-		SELECT id, username, password, email, created_time
-		FROM users 
-		WHERE id = $1
+		SELECT id, username, password, email, following_count, follower_count, created_time
+		FROM users WHERE id = $1
 	`, id)
-
 	return user, err
 }
 

@@ -1,27 +1,11 @@
 package repository
 
 import (
-	"community-backend/internal/common"
-	"community-backend/internal/model"
+	"github.com/seki18/lingdu-feed/internal/common"
+	"github.com/seki18/lingdu-feed/internal/model"
 
 	"errors"
 )
-
-// GetCommentByID retrieves a single Comment by primary key.
-func GetCommentByID(id int) (model.Comment, error) {
-	var comment model.Comment
-
-	err := common.DB.Get(&comment, `
-		SELECT c.id, c.post_id, c.user_id, u.username, c.reply_id,
-		       ru.username AS reply_username, c.content, c.created_time
-		FROM comments c
-		JOIN users u ON u.id = c.user_id
-		LEFT JOIN users ru ON ru.id = c.reply_id
-		WHERE c.id = $1
-	`, id)
-
-	return comment, err
-}
 
 // CreateComment inserts a new Comment and returns the created record.
 func CreateComment(comment model.Comment) (model.Comment, error) {
@@ -47,23 +31,6 @@ func CreateComment(comment model.Comment) (model.Comment, error) {
 	return comment, err
 }
 
-// GetCommentsByPostID retrieves all comments for a given post, ordered by creation time.
-func GetCommentsByPostID(postID int) ([]model.Comment, error) {
-	var comments []model.Comment
-
-	err := common.DB.Select(&comments, `
-		SELECT c.id, c.post_id, c.user_id, u.username, c.reply_id,
-		       ru.username AS reply_username, c.content, c.created_time
-		FROM comments c
-		JOIN users u ON u.id = c.user_id
-		LEFT JOIN users ru ON ru.id = c.reply_id
-		WHERE c.post_id = $1
-		ORDER BY c.created_time ASC
-	`, postID)
-
-	return comments, err
-}
-
 // DeleteCommentByID deletes a comment by its ID. If the comment has replies, they will also be deleted.
 func DeleteCommentByID(comment model.Comment) error {
 	result, err := common.DB.Exec(`
@@ -85,13 +52,20 @@ func DeleteCommentByID(comment model.Comment) error {
 	return nil
 }
 
-// GetCommentCountByPostID returns the total number of comments for a given post.
-func GetCommentCountByPostID(postID int) (int, error) {
-	var count int
-	err := common.DB.Get(&count, `
-		SELECT COUNT(1)
-		FROM comments
-		WHERE post_id = $1
+// GetCommentsByPostID retrieves all comments for a given post, ordered by creation time.
+func GetCommentsByPostID(postID int) ([]model.Comment, error) {
+	var comments []model.Comment
+
+	err := common.DB.Select(&comments, `
+		SELECT c.id, c.post_id, c.user_id, u.username, c.reply_id,
+		       ru.username AS reply_username, c.content, c.created_time
+		FROM comments c
+		JOIN users u ON u.id = c.user_id
+		LEFT JOIN comments pc ON pc.id = c.reply_id
+		LEFT JOIN users ru ON ru.id = pc.user_id
+		WHERE c.post_id = $1
+		ORDER BY c.created_time ASC
 	`, postID)
-	return count, err
+
+	return comments, err
 }

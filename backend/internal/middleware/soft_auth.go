@@ -1,8 +1,9 @@
 package middleware
 
 import (
-	"community-backend/internal/utils"
 	"strings"
+
+	"github.com/seki18/lingdu-feed/internal/utils"
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"

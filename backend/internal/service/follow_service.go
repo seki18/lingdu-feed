@@ -1,8 +1,8 @@
 package service
 
 import (
-	"community-backend/internal/model"
-	"community-backend/internal/repository"
+	"github.com/seki18/lingdu-feed/internal/model"
+	"github.com/seki18/lingdu-feed/internal/repository"
 )
 
 // IsFollowExist checks if a Follow already exists for the given user_id and post_id.
@@ -31,16 +31,6 @@ func DeleteFollow(req model.CreateFollowRequest) error {
 		FollowingID: req.FollowingID,
 	}
 	return repository.DeleteFollow(followDelete)
-}
-
-// GetFollowingCountByFollowerID returns the total number of users that a given user is following.
-func GetFollowingCountByFollowerID(followerID int) (int, error) {
-	return repository.GetFollowingCountByFollowerID(followerID)
-}
-
-// GetFollowerCountByFollowingID returns the total number of followers for a given user.
-func GetFollowerCountByFollowingID(followingID int) (int, error) {
-	return repository.GetFollowerCountByFollowingID(followingID)
 }
 
 // GetFollowingListByFollowerID returns a paginated list of users that a given user is following.

@@ -1,8 +1,8 @@
 package router
 
 import (
-	"community-backend/internal/handler"
-	"community-backend/internal/middleware"
+	"github.com/seki18/lingdu-feed/internal/handler"
+	"github.com/seki18/lingdu-feed/internal/middleware"
 
 	"github.com/gin-gonic/gin"
 )
@@ -11,8 +11,6 @@ import (
 func FollowRoutes(r *gin.Engine) {
 	follow := r.Group("/Follows")
 	{
-		follow.GET("/count/following/:followerId", handler.GetFollowingCountByFollowerID)
-		follow.GET("/count/follower/:followingId", handler.GetFollowerCountByFollowingID)
 		follow.GET("/list/following/:followerId", handler.GetFollowingListByFollowerID)
 		follow.GET("/list/follower/:followingId", handler.GetFollowerListByFollowingID)
 	}

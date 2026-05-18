@@ -1,33 +1,21 @@
 package repository
 
 import (
-	"community-backend/internal/common"
-	"community-backend/internal/model"
+	"github.com/seki18/lingdu-feed/internal/common"
+	"github.com/seki18/lingdu-feed/internal/model"
+
+	"github.com/jmoiron/sqlx"
 )
 
-// GetInteractionStatus retrieves a single Status by primary key.
+// GetInteractionStatus retrieves a single interaction_status row.
 func GetInteractionStatus(interactionStatus model.InteractionStatus) (model.InteractionStatus, error) {
-	var status model.InteractionStatus
-	err := common.DB.Get(&status, `
+	var s model.InteractionStatus
+	err := common.DB.Get(&s, `
 		SELECT post_id, user_id, status, updated_time
 		FROM interaction_status
-		WHERE post_id = $1
-		AND user_id = $2
+		WHERE post_id = $1 AND user_id = $2
 	`, interactionStatus.PostID, interactionStatus.UserID)
-
-	return status, err
-}
-
-// GetInteractionStatusByUserID retrieves Status by user ID.
-func GetInteractionStatusByUserID(userId int) ([]model.InteractionStatus, error) {
-	var statuses []model.InteractionStatus
-	err := common.DB.Select(&statuses, `
-		SELECT post_id, user_id, status, updated_time
-		FROM interaction_status
-		WHERE user_id = $1
-	`, userId)
-
-	return statuses, err
+	return s, err
 }
 
 // UpsertInteractionStatus inserts a new Status if it doesn't exist, or updates it if it does.
@@ -62,3 +50,44 @@ func UpsertInteractionStatus(interactionStatus model.InteractionStatus) error {
 	return err
 }
 
+// GetViewCounts returns a map of post_id → view count for the given post IDs.
+// Views are counted from interaction_status rows where status = 3 (FeedClick).
+func GetViewCounts(postIDs []int) (map[int]int, error) {
+	if len(postIDs) == 0 {
+		return map[int]int{}, nil
+	}
+	type row struct {
+		PostID int `db:"post_id"`
+		Cnt    int `db:"cnt"`
+	}
+	var rows []row
+	query, args, err := sqlx.In(`
+		SELECT post_id, COUNT(*) AS cnt
+		FROM interaction_status
+		WHERE post_id IN (?) AND status = ?
+		GROUP BY post_id
+	`, postIDs, model.FeedClick)
+	if err != nil {
+		return nil, err
+	}
+	query = common.DB.Rebind(query)
+	if err := common.DB.Select(&rows, query, args...); err != nil {
+		return nil, err
+	}
+	result := make(map[int]int, len(rows))
+	for _, r := range rows {
+		result[r.PostID] = r.Cnt
+	}
+	return result, nil
+}
+
+// GetViewCountByPostID returns the total number of views (clicks) for a single post.
+func GetViewCountByPostID(postID int) (int, error) {
+	var count int
+	err := common.DB.Get(&count, `
+		SELECT COUNT(1)
+		FROM interaction_status
+		WHERE post_id = $1 AND status = $2
+	`, postID, model.FeedClick)
+	return count, err
+}

@@ -1,17 +1,11 @@
 package service
 
 import (
-	"community-backend/internal/model"
-	"community-backend/internal/repository"
+	"github.com/seki18/lingdu-feed/internal/model"
+	"github.com/seki18/lingdu-feed/internal/repository"
 
 	"errors"
-	"log"
 )
-
-// GetPostByID retrieves a single post by its ID.
-func GetPostByID(id int) (model.Post, error) {
-	return repository.GetPostByID(id)
-}
 
 // CreatePost inserts a new post into the database.
 func CreatePost(req model.CreatePostRequest) (model.Post, error) {
@@ -27,13 +21,11 @@ func CreatePost(req model.CreatePostRequest) (model.Post, error) {
 // UpdatePost updates an existing post. Returns an error if the user
 // does not own the post.
 func UpdatePost(req model.UpdatePostRequest) (model.Post, error) {
-	post, err := repository.GetPostByID(req.ID)
-	if err != nil {
-		return model.Post{}, err
+	exists, err := repository.PostExists(req.ID)
+	if err != nil || !exists {
+		return model.Post{}, errors.New("post not found")
 	}
-	if req.UserID != post.UserID {
-		return model.Post{}, errors.New("no power")
-	}
+
 	postUpdate := model.Post{
 		ID:      req.ID,
 		UserID:  req.UserID,
@@ -44,38 +36,6 @@ func UpdatePost(req model.UpdatePostRequest) (model.Post, error) {
 	return repository.UpdatePost(postUpdate)
 }
 
-// GetRecentPosts returns posts ordered by creation time descending with request type controlling count.
-func GetRecentPosts(requestType string, excludeIDs []int, userID int) ([]model.Posts, error) {
-	count := 3
-	switch requestType {
-	case "initial", "refresh":
-		count = 5
-	case "subsequent", "next", "more":
-		count = 2
-	default:
-		count = 2
-	}
-
-	posts, err := repository.GetRecentPosts(count, excludeIDs, userID)
-	if err != nil {
-		return nil, err
-	}
-	log.Printf("[GetRecentPosts] Request type=%s count=%d fetched=%d excludeIDs=%v posts: %+v", requestType, count, len(posts), excludeIDs, posts)
-	if len(posts) > count {
-		for i := len(posts) - 1; i >= 0; i-- {
-			if len(posts) <= count {
-				break
-			}
-			log.Printf("[GetRecentPosts] Checking post ID %d with status %d", posts[i].ID, posts[i].Status)
-			if posts[i].Status >= model.FeedDisplay {
-				posts = append(posts[:i], posts[i+1:]...)
-			}
-		}
-	}
-	log.Printf("[GetRecentPosts] Returning %d posts after filtering, count: %d posts: %+v", len(posts), count, posts)
-	return posts, nil
-}
-
 // GetPostsByUserID returns all posts authored by the given user, with pagination.
 func GetPostsByUserID(userID int, page, pageSize int) ([]model.Posts, int, error) {
 	return repository.GetPostsByUserID(userID, page, pageSize)
@@ -84,4 +44,50 @@ func GetPostsByUserID(userID int, page, pageSize int) ([]model.Posts, int, error
 // DeletePostByID deletes a single post by its ID.
 func DeletePostByID(id int64) error {
 	return repository.DeletePostByID(id)
+}
+
+// GetPostDetail returns the full detail for a post, including interaction
+// status and comments, all fetched concurrently.
+func GetPostDetail(id, userID int) (*model.PostDetail, error) {
+	var (
+		post      model.Post
+		praised   bool
+		collected bool
+		comments  []model.Comment
+	)
+	errCh := make(chan error, 4)
+
+	go func() {
+		var e error
+		post, e = repository.GetPostContentByID(id)
+		errCh <- e
+	}()
+	go func() {
+		var e error
+		praised, e = repository.CheckPraised(userID, id)
+		errCh <- e
+	}()
+	go func() {
+		var e error
+		collected, e = repository.CheckCollected(userID, id)
+		errCh <- e
+	}()
+	go func() {
+		var e error
+		comments, e = repository.GetCommentsByPostID(id)
+		errCh <- e
+	}()
+
+	for i := 0; i < 4; i++ {
+		if err := <-errCh; err != nil {
+			return nil, err
+		}
+	}
+
+	return &model.PostDetail{
+		Post:         post,
+		HasPraised:   praised,
+		HasCollected: collected,
+		Comments:     comments,
+	}, nil
 }

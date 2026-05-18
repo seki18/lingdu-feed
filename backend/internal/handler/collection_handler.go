@@ -1,13 +1,15 @@
 package handler
 
 import (
-	"community-backend/internal/common"
-	"community-backend/internal/model"
-	"community-backend/internal/service"
 	"log"
 	"net/http"
 	"strconv"
 	"strings"
+
+	"github.com/seki18/lingdu-feed/internal/common"
+	"github.com/seki18/lingdu-feed/internal/model"
+	"github.com/seki18/lingdu-feed/internal/repository"
+	"github.com/seki18/lingdu-feed/internal/service"
 
 	"github.com/gin-gonic/gin"
 )
@@ -22,28 +24,7 @@ func GetCollectionByUserID(c *gin.Context) {
 		common.Error(c, http.StatusBadRequest, common.ErrInvalidParam.WithErr(err))
 		return
 	}
-	common.Success(c, gin.H{"items": collections, "total": total, "page": page, "page_size": pageSize})
-}
-
-// IsCollectionExist handles POST /Collections/exist (auth required). Checks if a praise exists for a given post and user.
-func IsCollectionExist(c *gin.Context) {
-	var req model.CreateCollectionRequest
-
-	if err := c.ShouldBindJSON(&req); err != nil {
-		log.Printf("[IsCollectionExist] JSON bind error: %v", err)
-		common.Error(c, http.StatusBadRequest, common.ErrInvalidParam.WithErr(err))
-		return
-	}
-	userID, _ := c.Get("user_id")
-	req.UserID = userID.(int)
-	log.Printf("[IsCollectionExist] Request: post_id=%d, user_id=%d", req.PostID, req.UserID)
-
-	exist, err := service.IsCollectionExist(req)
-	if err != nil {
-		common.Error(c, http.StatusInternalServerError, common.ErrInternalParam.WithErr(err))
-		return
-	}
-	common.Success(c, gin.H{"exists": exist})
+	common.SuccessPaginated(c, collections, total, page, pageSize)
 }
 
 // CreateCollection handles POST /Collections (auth required). Creates a new Collection.
@@ -65,6 +46,9 @@ func CreateCollection(c *gin.Context) {
 		common.Error(c, http.StatusInternalServerError, common.ErrInternalParam.WithErr(err))
 		return
 	}
+
+	// Sync post collection_count
+	_ = repository.IncrCollectionCount(req.PostID)
 
 	common.Success(c, Collection)
 }
@@ -93,21 +77,4 @@ func DeleteCollection(c *gin.Context) {
 		return
 	}
 	common.Success(c, nil)
-}
-
-// GetCollectionCountByPostID handles GET /Collections/count/:postId. Returns the total number of Collections for a given post.
-func GetCollectionCountByPostID(c *gin.Context) {
-	postID, err := strconv.Atoi(c.Param("postId"))
-	if err != nil || postID <= 0 {
-		common.Error(c, http.StatusBadRequest, common.ErrInvalidParam)
-		return
-	}
-
-	count, err := service.GetCollectionCountByPostID(postID)
-	if err != nil {
-		common.Error(c, http.StatusInternalServerError, common.ErrInternalParam.WithErr(err))
-		return
-	}
-
-	common.Success(c, gin.H{"count": count})
 }

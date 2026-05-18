@@ -1,19 +1,14 @@
 package router
 
 import (
-	"community-backend/internal/handler"
-	"community-backend/internal/middleware"
+	"github.com/seki18/lingdu-feed/internal/handler"
+	"github.com/seki18/lingdu-feed/internal/middleware"
 
 	"github.com/gin-gonic/gin"
 )
 
 // PostRoutes registers all post related routes.
 func PostRoutes(r *gin.Engine) {
-	post := r.Group("/post")
-	{
-		post.GET("/:id", handler.GetPostByID)
-	}
-
 	postAuth := r.Group("/post")
 	postAuth.Use(middleware.AuthMiddleware())
 	{
@@ -25,7 +20,6 @@ func PostRoutes(r *gin.Engine) {
 	posts := r.Group("/posts")
 	posts.Use(middleware.SoftAuthMiddleware())
 	{
-		posts.GET("", handler.GetRecentPosts)
-		posts.GET("/user/:user_id", handler.GetPostsByUserID)
+		posts.GET("/:id", handler.GetPostDetail)
 	}
 }

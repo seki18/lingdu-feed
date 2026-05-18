@@ -1,53 +1,16 @@
 package handler
 
 import (
-	"community-backend/internal/common"
-	"community-backend/internal/model"
-	"community-backend/internal/service"
 	"log"
 	"net/http"
-	"strconv"
-	"strings"
+
+	"github.com/seki18/lingdu-feed/internal/common"
+	"github.com/seki18/lingdu-feed/internal/model"
+	"github.com/seki18/lingdu-feed/internal/repository"
+	"github.com/seki18/lingdu-feed/internal/service"
 
 	"github.com/gin-gonic/gin"
 )
-
-// GetInteractionStatus handles GET /interaction-status/:id. Returns InteractionStatus details or 404 if not found.
-func GetInteractionStatus(c *gin.Context) {
-	var req model.CreateInteractionStatusRequest
-	req.PostID, _ = strconv.Atoi(c.Param("id"))
-	userID, _ := c.Get("user_id")
-	req.UserID = userID.(int)
-	log.Printf("[GetInteractionStatus] Request: post_id=%d user_id=%d status=%d", req.PostID, req.UserID, req.Status)
-
-	interactionStatus, err := service.GetInteractionStatus(req)
-	if err != nil {
-		// Distinguish "not found" from other errors
-		if strings.Contains(err.Error(), "no rows") {
-			common.Error(c, http.StatusNotFound, common.ErrNotFound)
-			return
-		}
-		common.Error(c, http.StatusBadRequest, common.ErrInvalidParam.WithErr(err))
-		return
-	}
-	common.Success(c, interactionStatus)
-}
-
-// GetInteractionStatusByUserID handles GET /interaction-status. Returns InteractionStatus details or 404 if not found.
-func GetInteractionStatusByUserID(c *gin.Context) {
-	userID, _ := c.Get("user_id")
-	interactionStatus, err := service.GetInteractionStatusByUserID(userID.(int))
-	if err != nil {
-		// Distinguish "not found" from other errors
-		if strings.Contains(err.Error(), "no rows") {
-			common.Error(c, http.StatusNotFound, common.ErrNotFound)
-			return
-		}
-		common.Error(c, http.StatusBadRequest, common.ErrInvalidParam.WithErr(err))
-		return
-	}
-	common.Success(c, interactionStatus)
-}
 
 // UpsetInteractionStatus handles POST /interaction-status (auth required). Creates or updates an InteractionStatus.
 func UpsetInteractionStatus(c *gin.Context) {
@@ -67,6 +30,47 @@ func UpsetInteractionStatus(c *gin.Context) {
 		log.Printf("[UpsetInteractionStatus] Service error: %v", err)
 		common.Error(c, http.StatusInternalServerError, common.ErrInternalParam.WithErr(err))
 		return
+	}
+
+	// Only increment view count when status first reaches click level
+	prevStatus := model.FeedUnknown
+	if existing, err := service.GetInteractionStatus(req); err == nil {
+		prevStatus = existing.Status
+	}
+	if req.Status >= model.FeedClick && prevStatus < model.FeedClick {
+		_ = repository.IncrViewCount(req.PostID)
+	}
+
+	common.Success(c, nil)
+}
+
+// BatchUpsertInteractionStatus handles POST /interaction-status/batch (auth required).
+// Accepts an array of {post_id, status} and bulk upserts them all.
+func BatchUpsertInteractionStatus(c *gin.Context) {
+	var reqs []model.CreateInteractionStatusRequest
+
+	if err := c.ShouldBindJSON(&reqs); err != nil {
+		log.Printf("[BatchUpsertInteractionStatus] JSON bind error: %v", err)
+		common.Error(c, http.StatusBadRequest, common.ErrInvalidParam.WithErr(err))
+		return
+	}
+	userID, _ := c.Get("user_id")
+	uid := userID.(int)
+
+	for i := range reqs {
+		reqs[i].UserID = uid
+		// Check previous status to decide whether view count should increment
+		prevStatus := model.FeedUnknown
+		if existing, err := service.GetInteractionStatus(reqs[i]); err == nil {
+			prevStatus = existing.Status
+		}
+		if err := service.UpsertInteractionStatus(reqs[i]); err != nil {
+			log.Printf("[BatchUpsertInteractionStatus] Service error at index %d: %v", i, err)
+		}
+		// Only increment view count when status first reaches click level
+		if reqs[i].Status >= model.FeedClick && prevStatus < model.FeedClick {
+			_ = repository.IncrViewCount(reqs[i].PostID)
+		}
 	}
 
 	common.Success(c, nil)

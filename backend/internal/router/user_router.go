@@ -1,8 +1,8 @@
 package router
 
 import (
-	"community-backend/internal/handler"
-	"community-backend/internal/middleware"
+	"github.com/seki18/lingdu-feed/internal/handler"
+	"github.com/seki18/lingdu-feed/internal/middleware"
 
 	"github.com/gin-gonic/gin"
 )
@@ -10,6 +10,7 @@ import (
 // UserRoutes registers all user and auth related routes.
 func UserRoutes(r *gin.Engine) {
 	user := r.Group("/users")
+	user.Use(middleware.SoftAuthMiddleware())
 	{
 		user.GET("/:id", handler.GetUserByID)
 	}

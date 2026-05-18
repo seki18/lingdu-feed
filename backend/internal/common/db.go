@@ -1,8 +1,9 @@
 package common
 
 import (
-	"community-backend/config"
 	"fmt"
+
+	"github.com/seki18/lingdu-feed/config"
 
 	"github.com/jmoiron/sqlx"
 	_ "github.com/lib/pq"

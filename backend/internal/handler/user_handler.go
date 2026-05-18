@@ -1,12 +1,13 @@
 package handler
 
 import (
-	"community-backend/internal/common"
-	"community-backend/internal/model"
-	"community-backend/internal/service"
+	"log"
 	"net/http"
 	"strconv"
-	"log"
+
+	"github.com/seki18/lingdu-feed/internal/common"
+	"github.com/seki18/lingdu-feed/internal/model"
+	"github.com/seki18/lingdu-feed/internal/service"
 
 	"github.com/gin-gonic/gin"
 )
@@ -14,12 +15,26 @@ import (
 // GetUserByID handles GET /users/:id. Returns user details by ID.
 func GetUserByID(c *gin.Context) {
 	id, _ := strconv.Atoi(c.Param("id"))
-	users, err := service.GetUserByID(id)
+	user, err := service.GetUserByID(id)
 	if err != nil {
 		common.Error(c, http.StatusBadRequest, common.ErrInvalidParam.WithErr(err))
 		return
 	}
-	common.Success(c, users)
+	// If logged in, check whether the current user follows this user
+	callerID := 0
+	if uid, exists := c.Get("user_id"); exists {
+		if v, ok := uid.(int); ok {
+			callerID = v
+		}
+	}
+	if callerID > 0 && callerID != id {
+		following, _ := service.IsFollowExist(model.CreateFollowRequest{
+			FollowerID:  callerID,
+			FollowingID: id,
+		})
+		user.IsFollowing = following
+	}
+	common.Success(c, user)
 }
 
 // CreateUser handles POST /auth/register. Creates a new user account.

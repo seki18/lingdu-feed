@@ -1,9 +1,10 @@
 package repository
 
 import (
-	"community-backend/internal/common"
-	"community-backend/internal/model"
 	"fmt"
+
+	"github.com/seki18/lingdu-feed/internal/common"
+	"github.com/seki18/lingdu-feed/internal/model"
 
 	"errors"
 )
@@ -58,26 +59,28 @@ func DeleteFollow(follow model.Follow) error {
 	return nil
 }
 
-// GetFollowingCountByFollowerID returns the total number of users that a given user is following.
-func GetFollowingCountByFollowerID(followerID int) (int, error) {
-	var count int
-	err := common.DB.Get(&count, `
-		SELECT COUNT(1)
-		FROM follows
-		WHERE follower_id = $1
-	`, followerID)
-	return count, err
+// IncrFollowingCount atomically increments the following_count for a user.
+func IncrFollowingCount(userID int) error {
+	_, err := common.DB.Exec(`UPDATE users SET following_count = following_count + 1 WHERE id = $1`, userID)
+	return err
 }
 
-// GetFollowerCountByFollowingID returns the total number of followers for a given user.
-func GetFollowerCountByFollowingID(followingID int) (int, error) {
-	var count int
-	err := common.DB.Get(&count, `
-		SELECT COUNT(1)
-		FROM follows
-		WHERE following_id = $1
-	`, followingID)
-	return count, err
+// DecrFollowingCount atomically decrements the following_count for a user (floor 0).
+func DecrFollowingCount(userID int) error {
+	_, err := common.DB.Exec(`UPDATE users SET following_count = GREATEST(following_count - 1, 0) WHERE id = $1`, userID)
+	return err
+}
+
+// IncrFollowerCount atomically increments the follower_count for a user.
+func IncrFollowerCount(userID int) error {
+	_, err := common.DB.Exec(`UPDATE users SET follower_count = follower_count + 1 WHERE id = $1`, userID)
+	return err
+}
+
+// DecrFollowerCount atomically decrements the follower_count for a user (floor 0).
+func DecrFollowerCount(userID int) error {
+	_, err := common.DB.Exec(`UPDATE users SET follower_count = GREATEST(follower_count - 1, 0) WHERE id = $1`, userID)
+	return err
 }
 
 // GetFollowingListByFollowerID returns a paginated list of users that a given user is following.

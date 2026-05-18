@@ -1,32 +1,17 @@
 package handler
 
 import (
-	"community-backend/internal/common"
-	"community-backend/internal/model"
-	"community-backend/internal/service"
 	"log"
 	"net/http"
 	"strconv"
 	"strings"
 
+	"github.com/seki18/lingdu-feed/internal/common"
+	"github.com/seki18/lingdu-feed/internal/model"
+	"github.com/seki18/lingdu-feed/internal/service"
+
 	"github.com/gin-gonic/gin"
 )
-
-// GetPostByID handles GET /post/:id. Returns post details or 404 if not found.
-func GetPostByID(c *gin.Context) {
-	id, _ := strconv.Atoi(c.Param("id"))
-	posts, err := service.GetPostByID(id)
-	if err != nil {
-		// Distinguish "not found" from other errors
-		if strings.Contains(err.Error(), "no rows") {
-			common.Error(c, http.StatusNotFound, common.ErrPostNotFound)
-			return
-		}
-		common.Error(c, http.StatusBadRequest, common.ErrInvalidParam.WithErr(err))
-		return
-	}
-	common.Success(c, posts)
-}
 
 // CreatePost handles POST /post (auth required). Creates a new post.
 func CreatePost(c *gin.Context) {
@@ -69,48 +54,12 @@ func UpdatePost(c *gin.Context) {
 	common.Success(c, post)
 }
 
-// GetRecentPosts handles GET /posts. Returns the most recent posts
-// with optional request_type query parameter and current_ids for deduplication.
-func GetRecentPosts(c *gin.Context) {
-	requestType := c.Query("request_type")
-	if requestType == "" {
-		requestType = "subsequent"
-	}
-
-	excludeIDs := []int{}
-	if currentIDs := c.Query("current_ids"); currentIDs != "" {
-		for _, idStr := range strings.Split(currentIDs, ",") {
-			idStr = strings.TrimSpace(idStr)
-			if idStr == "" {
-				continue
-			}
-			id, err := strconv.Atoi(idStr)
-			if err != nil || id <= 0 {
-				common.Error(c, http.StatusBadRequest, common.ErrInvalidParam)
-				return
-			}
-			excludeIDs = append(excludeIDs, id)
-		}
-	}
-
-	userIDInt, _ := c.Get("user_id")
-	uid := userIDInt.(int)
-	log.Printf("[GetRecentPosts] Request: request_type=%s exclude_ids=%v user_id=%d", requestType, excludeIDs, uid)
-	posts, err := service.GetRecentPosts(requestType, excludeIDs, uid)
-	if err != nil {
-		common.Error(c, http.StatusBadRequest, common.ErrInvalidParam.WithErr(err))
-		return
-	}
-	common.Success(c, posts)
-}
-
 // DeletePostByID handles DELETE /post/:id. Deletes a post or returns 404 if not found.
 func DeletePostByID(c *gin.Context) {
 	id, _ := strconv.Atoi(c.Param("id"))
 	log.Printf("[DeletePostByID] Request: id=%d", id)
 	err := service.DeletePostByID(int64(id))
 	if err != nil {
-		// Distinguish "not found" from other errors
 		if strings.Contains(err.Error(), "no rows") {
 			common.Error(c, http.StatusNotFound, common.ErrPostNotFound)
 			return
@@ -136,5 +85,29 @@ func GetPostsByUserID(c *gin.Context) {
 		common.Error(c, http.StatusBadRequest, common.ErrInvalidParam.WithErr(err))
 		return
 	}
-	common.Success(c, gin.H{"items": posts, "total": total, "page": page, "page_size": pageSize})
+	common.SuccessPaginated(c, posts, total, page, pageSize)
+}
+
+// GetPostDetail handles GET /posts/:id. Returns post content, interaction status
+// (has_praised, has_collected), and comments in a single response.
+func GetPostDetail(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil || id <= 0 {
+		common.Error(c, http.StatusBadRequest, common.ErrInvalidParam)
+		return
+	}
+	userID, _ := c.Get("user_id")
+	uid := userID.(int)
+
+	detail, err := service.GetPostDetail(id, uid)
+	if err != nil {
+		if strings.Contains(err.Error(), "no rows") {
+			common.Error(c, http.StatusNotFound, common.ErrPostNotFound)
+			return
+		}
+		common.Error(c, http.StatusBadRequest, common.ErrInvalidParam.WithErr(err))
+		return
+	}
+
+	common.Success(c, detail)
 }

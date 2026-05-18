@@ -1,14 +1,9 @@
 package service
 
 import (
-	"community-backend/internal/model"
-	"community-backend/internal/repository"
+	"github.com/seki18/lingdu-feed/internal/model"
+	"github.com/seki18/lingdu-feed/internal/repository"
 )
-
-// GetCommentByID retrieves a single Comment by its ID.
-func GetCommentByID(id int) (model.Comment, error) {
-	return repository.GetCommentByID(id)
-}
 
 // CreateComment inserts a new Comment into the database.
 func CreateComment(req model.CreateCommentRequest) (model.Comment, error) {
@@ -25,21 +20,11 @@ func CreateComment(req model.CreateCommentRequest) (model.Comment, error) {
 	return repository.CreateComment(commentCreate)
 }
 
-// GetCommentsByPostID retrieves all comments for a given post.
-func GetCommentsByPostID(postID int) ([]model.Comment, error) {
-	return repository.GetCommentsByPostID(postID)
-}
-
 // DeleteCommentByID deletes a comment by its ID. If the comment has replies, they will also be deleted.
 func DeleteCommentByID(req model.DeleteCommentRequest) error {
 	commentDelete := model.Comment{
-		ID:  req.PostID,
-		UserID:  req.UserID,
+		ID:     req.PostID,
+		UserID: req.UserID,
 	}
 	return repository.DeleteCommentByID(commentDelete)
-}
-
-// GetCommentCountByPostID returns the total number of comments for a given post.
-func GetCommentCountByPostID(postID int) (int, error) {
-	return repository.GetCommentCountByPostID(postID)
 }

@@ -1,10 +1,10 @@
 package service
 
 import (
-	"community-backend/internal/common"
-	"community-backend/internal/model"
-	"community-backend/internal/repository"
-	"community-backend/internal/utils"
+	"github.com/seki18/lingdu-feed/internal/common"
+	"github.com/seki18/lingdu-feed/internal/model"
+	"github.com/seki18/lingdu-feed/internal/repository"
+	"github.com/seki18/lingdu-feed/internal/utils"
 
 	"golang.org/x/crypto/bcrypt"
 )

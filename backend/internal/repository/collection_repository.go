@@ -1,9 +1,10 @@
 package repository
 
 import (
-	"community-backend/internal/common"
-	"community-backend/internal/model"
 	"fmt"
+
+	"github.com/seki18/lingdu-feed/internal/common"
+	"github.com/seki18/lingdu-feed/internal/model"
 
 	"errors"
 )
@@ -27,18 +28,6 @@ func GetCollectionByUserID(userID int, page, pageSize int) ([]model.Collection, 
 	`, userID, pageSize, offset)
 
 	return collections, total, err
-}
-
-func IsCollectionExist(collection model.Collection) (bool, error) {
-	var exists bool
-	err := common.DB.Get(&exists, `
-		SELECT EXISTS (
-			SELECT 1
-			FROM collections
-			WHERE user_id = $1 AND post_id = $2
-		)
-	`, collection.UserID, collection.PostID)
-	return exists, err
 }
 
 // CreateCollection inserts a new Collection and returns the created record.
@@ -79,13 +68,11 @@ func DeleteCollection(collection model.Collection) error {
 	return nil
 }
 
-// GetCollectionCountByPostID returns the total number of collections for a given post.
-func GetCollectionCountByPostID(postID int) (int, error) {
-	var count int
-	err := common.DB.Get(&count, `
-		SELECT COUNT(1)
-		FROM collections
-		WHERE post_id = $1
-	`, postID)
-	return count, err
+// CheckCollected returns whether the given user has collected the given post.
+func CheckCollected(userID, postID int) (bool, error) {
+	var exists bool
+	err := common.DB.Get(&exists, `
+		SELECT EXISTS(SELECT 1 FROM collections WHERE user_id = $1 AND post_id = $2)
+	`, userID, postID)
+	return exists, err
 }

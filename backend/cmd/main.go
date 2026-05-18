@@ -1,9 +1,9 @@
 package main
 
 import (
-	"community-backend/config"
-	"community-backend/internal/common"
-	"community-backend/internal/router"
+	"github.com/seki18/lingdu-feed/config"
+	"github.com/seki18/lingdu-feed/internal/common"
+	"github.com/seki18/lingdu-feed/internal/router"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
@@ -38,11 +38,11 @@ func main() {
 
 	router.UserRoutes(r)
 	router.FollowRoutes(r)
+	router.FeedRoutes(r)
 	router.PostRoutes(r)
 	router.CommentRoutes(r)
 	router.PraiseRoutes(r)
 	router.CollectionRoutes(r)
-	router.HistoryRoutes(r)
 	router.InteractionStatusRoutes(r)
 
 	r.Run(":18080")

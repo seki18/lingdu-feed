@@ -1,24 +1,13 @@
 package repository
 
 import (
-	"fmt"
-	"community-backend/internal/common"
-	"community-backend/internal/model"
+	"strconv"
+
+	"github.com/seki18/lingdu-feed/internal/common"
+	"github.com/seki18/lingdu-feed/internal/model"
 
 	"errors"
 )
-
-func IsPraiseExist(praise model.Praise) (bool, error) {
-	var exists bool
-	err := common.DB.Get(&exists, `
-		SELECT EXISTS (
-			SELECT 1
-			FROM praises
-			WHERE user_id = $1 AND post_id = $2
-		)
-	`, praise.UserID, praise.PostID)
-	return exists, err
-}
 
 // CreatePraise inserts a new Praise and returns the created record.
 func CreatePraise(praise model.Praise) (model.Praise, error) {
@@ -52,19 +41,17 @@ func DeletePraise(praise model.Praise) error {
 	}
 
 	if rows == 0 {
-		return errors.New("praise not found, user_id: " + fmt.Sprint(praise.UserID) + ", post_id: " + fmt.Sprint(praise.PostID))
+		return errors.New("praise not found, user_id: " + strconv.Itoa(praise.UserID) + ", post_id: " + strconv.Itoa(praise.PostID))
 	}
 
 	return nil
 }
 
-// GetPraiseCountByPostID returns the total number of praises for a given post.
-func GetPraiseCountByPostID(postID int) (int, error) {
-	var count int
-	err := common.DB.Get(&count, `
-		SELECT COUNT(1)
-		FROM praises
-		WHERE post_id = $1
-	`, postID)
-	return count, err
+// CheckPraised returns whether the given user has praised the given post.
+func CheckPraised(userID, postID int) (bool, error) {
+	var exists bool
+	err := common.DB.Get(&exists, `
+		SELECT EXISTS(SELECT 1 FROM praises WHERE user_id = $1 AND post_id = $2)
+	`, userID, postID)
+	return exists, err
 }

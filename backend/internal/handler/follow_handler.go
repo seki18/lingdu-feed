@@ -1,13 +1,15 @@
 package handler
 
 import (
-	"community-backend/internal/common"
-	"community-backend/internal/model"
-	"community-backend/internal/service"
 	"log"
 	"net/http"
 	"strconv"
 	"strings"
+
+	"github.com/seki18/lingdu-feed/internal/common"
+	"github.com/seki18/lingdu-feed/internal/model"
+	"github.com/seki18/lingdu-feed/internal/repository"
+	"github.com/seki18/lingdu-feed/internal/service"
 
 	"github.com/gin-gonic/gin"
 )
@@ -46,6 +48,13 @@ func CreateFollow(c *gin.Context) {
 	req.FollowerID = userID.(int)
 	log.Printf("[CreateFollow] Request: following_id=%d, follower_id=%d", req.FollowingID, req.FollowerID)
 
+	// Check if already following to avoid duplicate key error
+	exists, _ := service.IsFollowExist(req)
+	if exists {
+		common.Error(c, http.StatusConflict, common.ErrEmailExists)
+		return
+	}
+
 	Follow, err := service.CreateFollow(req)
 	if err != nil {
 		log.Printf("[CreateFollow] Service error: %v", err)
@@ -53,10 +62,14 @@ func CreateFollow(c *gin.Context) {
 		return
 	}
 
+	// Sync user follow counts
+	_ = repository.IncrFollowingCount(req.FollowerID)
+	_ = repository.IncrFollowerCount(req.FollowingID)
+
 	common.Success(c, Follow)
 }
 
-// DeleteFollow handles DELETE /Follows/:id (auth required). Deletes a Follow and its replies.
+// DeleteFollow handles DELETE /Follows/:id (auth required). Deletes a Follow.
 func DeleteFollow(c *gin.Context) {
 	var req model.CreateFollowRequest
 
@@ -79,41 +92,12 @@ func DeleteFollow(c *gin.Context) {
 		common.Error(c, http.StatusInternalServerError, common.ErrInternalParam.WithErr(err))
 		return
 	}
+
+	// Sync user follow counts
+	_ = repository.DecrFollowingCount(req.FollowerID)
+	_ = repository.DecrFollowerCount(req.FollowingID)
+
 	common.Success(c, nil)
-}
-
-// GetFollowingCountByFollowerID handles GET /Follows/count/following/:followerId. Returns the total number of Follows for a given follower.
-func GetFollowingCountByFollowerID(c *gin.Context) {
-	followerID, err := strconv.Atoi(c.Param("followerId"))
-	if err != nil || followerID <= 0 {
-		common.Error(c, http.StatusBadRequest, common.ErrInvalidParam)
-		return
-	}
-
-	count, err := service.GetFollowingCountByFollowerID(followerID)
-	if err != nil {
-		common.Error(c, http.StatusInternalServerError, common.ErrInternalParam.WithErr(err))
-		return
-	}
-
-	common.Success(c, gin.H{"count": count})
-}
-
-// GetFollowerCountByFollowingID handles GET /Follows/count/follower/:followingId. Returns the total number of followers for a given user.
-func GetFollowerCountByFollowingID(c *gin.Context) {
-	followingID, err := strconv.Atoi(c.Param("followingId"))
-	if err != nil || followingID <= 0 {
-		common.Error(c, http.StatusBadRequest, common.ErrInvalidParam)
-		return
-	}
-
-	count, err := service.GetFollowerCountByFollowingID(followingID)
-	if err != nil {
-		common.Error(c, http.StatusInternalServerError, common.ErrInternalParam.WithErr(err))
-		return
-	}
-
-	common.Success(c, gin.H{"count": count})
 }
 
 // GetFollowingListByFollowerID handles GET /Follows/list/following/:followerId. Returns a paginated list of users that a given user is following.
