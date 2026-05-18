@@ -23,8 +23,9 @@ func PostRoutes(r *gin.Engine) {
 	}
 
 	posts := r.Group("/posts")
+	posts.Use(middleware.SoftAuthMiddleware())
 	{
 		posts.GET("", handler.GetRecentPosts)
-		posts.GET("/:count", handler.GetRecentPosts)
+		posts.GET("/user/:user_id", handler.GetPostsByUserID)
 	}
 }

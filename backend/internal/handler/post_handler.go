@@ -69,28 +69,9 @@ func UpdatePost(c *gin.Context) {
 	common.Success(c, post)
 }
 
-// GetRecentPosts handles GET /posts. Returns the most recent posts,
-// or filtered by user_id query parameter.
+// GetRecentPosts handles GET /posts. Returns the most recent posts
+// with optional request_type query parameter and current_ids for deduplication.
 func GetRecentPosts(c *gin.Context) {
-	userIDStr := c.Query("user_id")
-	if userIDStr != "" {
-		userID, err := strconv.Atoi(userIDStr)
-		if err != nil || userID <= 0 {
-			common.Error(c, http.StatusBadRequest, common.ErrInvalidParam)
-			return
-		}
-		log.Printf("[GetPostsByUserID] Request: user_id=%d", userID)
-		page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
-		pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "10"))
-		posts, total, err := service.GetPostsByUserID(userID, page, pageSize)
-		if err != nil {
-			common.Error(c, http.StatusBadRequest, common.ErrInvalidParam.WithErr(err))
-			return
-		}
-		common.Success(c, gin.H{"items": posts, "total": total, "page": page, "page_size": pageSize})
-		return
-	}
-
 	requestType := c.Query("request_type")
 	if requestType == "" {
 		requestType = "subsequent"
@@ -112,8 +93,10 @@ func GetRecentPosts(c *gin.Context) {
 		}
 	}
 
-	log.Printf("[GetRecentPosts] Request: request_type=%s exclude_ids=%v", requestType, excludeIDs)
-	posts, err := service.GetRecentPosts(requestType, excludeIDs)
+	userIDInt, _ := c.Get("user_id")
+	uid := userIDInt.(int)
+	log.Printf("[GetRecentPosts] Request: request_type=%s exclude_ids=%v user_id=%d", requestType, excludeIDs, uid)
+	posts, err := service.GetRecentPosts(requestType, excludeIDs, uid)
 	if err != nil {
 		common.Error(c, http.StatusBadRequest, common.ErrInvalidParam.WithErr(err))
 		return
@@ -136,4 +119,22 @@ func DeletePostByID(c *gin.Context) {
 		return
 	}
 	common.Success(c, nil)
+}
+
+// GetPostsByUserID handles GET /posts/:user_id. Returns all posts by a user with pagination.
+func GetPostsByUserID(c *gin.Context) {
+	userID, err := strconv.Atoi(c.Param("user_id"))
+	if err != nil || userID <= 0 {
+		common.Error(c, http.StatusBadRequest, common.ErrInvalidParam)
+		return
+	}
+	log.Printf("[GetPostsByUserID] Request: user_id=%d", userID)
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "10"))
+	posts, total, err := service.GetPostsByUserID(userID, page, pageSize)
+	if err != nil {
+		common.Error(c, http.StatusBadRequest, common.ErrInvalidParam.WithErr(err))
+		return
+	}
+	common.Success(c, gin.H{"items": posts, "total": total, "page": page, "page_size": pageSize})
 }

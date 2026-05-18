@@ -60,7 +60,7 @@ func UpsetInteractionStatus(c *gin.Context) {
 	}
 	userID, _ := c.Get("user_id")
 	req.UserID = userID.(int)
-	// log.Printf("[UpsetInteractionStatus] Request: post_id=%d user_id=%d status=%d", req.PostID, req.UserID, req.Status)
+	log.Printf("[UpsetInteractionStatus] Request: post_id=%d user_id=%d status=%d", req.PostID, req.UserID, req.Status)
 
 	err := service.UpsertInteractionStatus(req)
 	if err != nil {

@@ -45,7 +45,7 @@ func UpdatePost(req model.UpdatePostRequest) (model.Post, error) {
 }
 
 // GetRecentPosts returns posts ordered by creation time descending with request type controlling count.
-func GetRecentPosts(requestType string, excludeIDs []int) ([]model.Posts, error) {
+func GetRecentPosts(requestType string, excludeIDs []int, userID int) ([]model.Posts, error) {
 	count := 3
 	switch requestType {
 	case "initial", "refresh":
@@ -56,7 +56,7 @@ func GetRecentPosts(requestType string, excludeIDs []int) ([]model.Posts, error)
 		count = 2
 	}
 
-	posts, err := repository.GetRecentPosts(count, excludeIDs)
+	posts, err := repository.GetRecentPosts(count, excludeIDs, userID)
 	if err != nil {
 		return nil, err
 	}

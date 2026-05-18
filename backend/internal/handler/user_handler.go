@@ -6,6 +6,7 @@ import (
 	"community-backend/internal/service"
 	"net/http"
 	"strconv"
+	"log"
 
 	"github.com/gin-gonic/gin"
 )

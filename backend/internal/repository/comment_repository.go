@@ -37,6 +37,13 @@ func CreateComment(comment model.Comment) (model.Comment, error) {
 	_ = common.DB.Get(&username, `SELECT username FROM users WHERE id = $1`, comment.UserID)
 	comment.Username = username
 
+	// Populate reply_username if this is a reply
+	if comment.ReplyID != nil {
+		var replyUsername string
+		_ = common.DB.Get(&replyUsername, `SELECT u.username FROM comments c JOIN users u ON u.id = c.user_id WHERE c.id = $1`, *comment.ReplyID)
+		comment.ReplyUsername = &replyUsername
+	}
+
 	return comment, err
 }
 

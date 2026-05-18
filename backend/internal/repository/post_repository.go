@@ -8,14 +8,15 @@ import (
 	"github.com/jmoiron/sqlx"
 )
 
-// GetPostByID retrieves a single post by primary key.
+// GetPostByID retrieves a single post by primary key, including author username.
 func GetPostByID(id int) (model.Post, error) {
 	var post model.Post
 
 	err := common.DB.Get(&post, `
-		SELECT id, user_id, title, content, created_time, updated_time
-		FROM posts 
-		WHERE id = $1
+		SELECT p.id, p.user_id, u.username, p.title, p.content, p.created_time, p.updated_time
+		FROM posts p
+		JOIN users u ON u.id = p.user_id
+		WHERE p.id = $1
 	`, id)
 
 	return post, err
@@ -47,7 +48,7 @@ func UpdatePost(post model.Post) (model.Post, error) {
 }
 
 // GetRecentPosts returns the most recent posts with author usernames.
-func GetRecentPosts(count int, excludeIDs []int) ([]model.Posts, error) {
+func GetRecentPosts(count int, excludeIDs []int, userID int) ([]model.Posts, error) {
 	var posts []model.Posts
 
 	query := `
@@ -57,13 +58,17 @@ func GetRecentPosts(count int, excludeIDs []int) ([]model.Posts, error) {
 		ON p.user_id = u.id
 		LEFT JOIN interaction_status as s
 		ON p.id = s.post_id
-		AND p.user_id = s.user_id
 		WHERE s.status IS NULL OR s.status <= ?`
 	args := []any{model.FeedDisplay}
 
 	if len(excludeIDs) > 0 {
 		query += ` AND p.id NOT IN (?)`
 		args = append(args, excludeIDs)
+	}
+
+	if userID != -1 {
+		query += ` AND s.user_id = ?`
+		args = append(args, userID)
 	}
 
 	query += `

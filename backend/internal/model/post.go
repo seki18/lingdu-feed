@@ -6,6 +6,7 @@ import "time"
 type Post struct {
 	ID          int       `db:"id" json:"id"`
 	UserID      int       `db:"user_id" json:"user_id"`
+	Username    string    `db:"username" json:"username"`
 	Title       string    `db:"title" json:"title"`
 	Content     string    `db:"content" json:"content"`
 	CreatedTime time.Time `db:"created_time" json:"created_time"`
@@ -29,10 +30,10 @@ type UpdatePostRequest struct {
 
 // Posts is the summary view of a post, used in post lists.
 type Posts struct {
-	ID          int       `db:"id" json:"id"`
-	UserID      int       `db:"user_id" json:"user_id"`
-	Username    string    `db:"username" json:"username"`
-	Title       string    `db:"title" json:"title"`
-	Status	  	FeedStatus`db:"status" json:"-"`
-	CreatedTime time.Time `db:"created_time" json:"created_time"`
+	ID          int        `db:"id" json:"id"`
+	UserID      int        `db:"user_id" json:"user_id"`
+	Username    string     `db:"username" json:"username"`
+	Title       string     `db:"title" json:"title"`
+	Status      FeedStatus `db:"status" json:"-"`
+	CreatedTime time.Time  `db:"created_time" json:"created_time"`
 }

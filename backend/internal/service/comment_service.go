@@ -33,7 +33,7 @@ func GetCommentsByPostID(postID int) ([]model.Comment, error) {
 // DeleteCommentByID deletes a comment by its ID. If the comment has replies, they will also be deleted.
 func DeleteCommentByID(req model.DeleteCommentRequest) error {
 	commentDelete := model.Comment{
-		PostID:  req.PostID,
+		ID:  req.PostID,
 		UserID:  req.UserID,
 	}
 	return repository.DeleteCommentByID(commentDelete)

@@ -37,6 +37,7 @@ func main() {
 	}))
 
 	router.UserRoutes(r)
+	router.FollowRoutes(r)
 	router.PostRoutes(r)
 	router.CommentRoutes(r)
 	router.PraiseRoutes(r)

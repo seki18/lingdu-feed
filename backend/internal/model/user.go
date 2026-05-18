@@ -20,5 +20,6 @@ type CreateUserRequest struct {
 
 // UpdateUserRequest is the JSON body for PUT /users.
 type UpdateUserRequest struct {
+	ID       int    `db:"id" json:"id"`
 	Username string `json:"username"`
 }
