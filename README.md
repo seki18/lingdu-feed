@@ -68,13 +68,46 @@ This keeps the codebase testable and each layer replaceable independently.
 
 ### Feed Recommendation Algorithm
 
-The `/feed/recommend` endpoint blends three signal sources:
+The `/feed/recommend` endpoint composes posts from three distinct sources and applies a weighted scoring model for the "recommend" portion.
 
-1. **Recommend (≥50%)** — Posts picked by the interaction-status recommendation heuristics
-2. **Recent (~33%)** — Fresh content from all users, with already-seen/dismissed posts filtered out
-3. **Following (~17%)** — Posts from followed users
+#### Post Scoring (Recommend Pool)
 
-The algorithm ensures users always see a mix of discovery + familiarity, with deduplication via the `interaction_status` table.
+The recommend pool uses a weighted scoring formula computed directly in SQL:
+
+```
+score = recency × 0.1 + views × 3 + praises × 5 + collections × 4 + comments × 4
+```
+
+Weights reflect engagement value — a *praise* (like) is the strongest signal (×5), while *views* contribute modestly (×3) to avoid inflating clickbait. Recency (Unix epoch × 0.1) ensures trending posts naturally decay over time.
+
+#### Composition Strategy
+
+| Source | Proportion | Behavior |
+|--------|-----------|----------|
+| **Recommend** | ≥50% (`count/2 + 1`) | Top-N by weighted score, no interaction filter |
+| **Recent** | ~33% of remainder | Latest posts, excluding already-seen/dismissed |
+| **Following** | ~17% of remainder | Posts from followed users, excluding already-seen/dismissed |
+
+1. Fetch the recommend slice first (guaranteed majority)
+2. Fill the remaining slots with 2/3 recent + 1/3 following
+3. Shuffle the recent+following pool randomly, then append after the recommend block
+
+This ensures the top of every feed is high-engagement content, while the tail provides a randomized mix of freshness and social relevance.
+
+#### Deduplication & Staleness
+
+All three sources accept an `excludeIDs` list (IDs the client has already seen). Additionally, the recent and following sources filter via `interaction_status`: posts where `status > FeedDisplay` (i.e., clicked/dismissed beyond display) are excluded. The recommend pool intentionally skips this filter to allow popular posts to resurface.
+
+#### Feed Size
+
+Controlled by `requestType`:
+
+| Request Type | Posts Returned |
+|-------------|---------------|
+| `initial` / `refresh` | 6 |
+| `subsequent` / `next` / `more` | 10 |
+
+This allows the client to request smaller batches for first-load vs. scroll-based pagination.
 
 ### Soft Auth vs Hard Auth
 
