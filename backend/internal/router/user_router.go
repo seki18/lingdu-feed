@@ -20,6 +20,7 @@ func UserRoutes(r *gin.Engine) {
 	{
 		authValid.GET("/me", handler.Me)
 		authValid.PUT("", handler.UpdateUsername)
+		authValid.PUT("/password", handler.ChangePassword)
 	}
 
 	auth := r.Group("/auth")

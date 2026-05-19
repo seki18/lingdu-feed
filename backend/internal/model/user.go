@@ -26,3 +26,10 @@ type UpdateUserRequest struct {
 	ID       int    `db:"id" json:"id"`
 	Username string `json:"username"`
 }
+
+// ChangePasswordRequest is the JSON body for PUT /users/password.
+type ChangePasswordRequest struct {
+	ID          int    `db:"id" json:"id"`
+	OldPassword string `json:"old_password"`
+	NewPassword string `json:"new_password"`
+}

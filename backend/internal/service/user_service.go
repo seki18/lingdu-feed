@@ -75,3 +75,22 @@ func UpdateUsername(req model.UpdateUserRequest) (model.User, error) {
 	}
 	return repository.UpdateUserName(userUpdate)
 }
+
+// ChangePassword verifies the old password and updates to the new password.
+func ChangePassword(req model.ChangePasswordRequest) error {
+	user, err := repository.GetUserByID(req.ID)
+	if err != nil {
+		return err
+	}
+	if user.ID == 0 {
+		return common.ErrUserNotFound
+	}
+	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(req.OldPassword)); err != nil {
+		return common.ErrPasswordError
+	}
+	hashedPwd, err := bcrypt.GenerateFromPassword([]byte(req.NewPassword), 14)
+	if err != nil {
+		return err
+	}
+	return repository.UpdatePassword(req.ID, string(hashedPwd))
+}

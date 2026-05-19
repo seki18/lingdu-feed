@@ -95,7 +95,11 @@ export default function Header() {
                       logout();
                       setUser(null);
                       setMenuOpen(false);
-                      router.push("/");
+                      if (window.location.pathname !== "/") {
+                        router.push("/");
+                      } else {
+                        window.dispatchEvent(new Event("feed-refresh"));
+                      }
                       window.dispatchEvent(new Event("auth-changed"));
                     }}
                     className="w-full px-4 py-2 text-left hover:bg-gray-100 inline-flex items-center gap-2"
@@ -129,6 +133,11 @@ export default function Header() {
         onSubmit={(userData) => {
           setUser(userData);
           setOpen(false);
+          if (window.location.pathname !== "/") {
+            router.push("/");
+          } else {
+            window.dispatchEvent(new Event("feed-refresh"));
+          }
           window.dispatchEvent(new Event("auth-changed"));
         }}
       />

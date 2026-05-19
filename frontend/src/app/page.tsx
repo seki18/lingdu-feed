@@ -176,9 +176,16 @@ export default function HomePage() {
     };
     window.addEventListener("auth-changed", onAuthChanged);
     window.addEventListener("post-stats-changed", onPostStatsChanged);
+    const onFeedRefresh = () => {
+      feedCache = null;
+      setTab("recommend");
+      loadTab("recommend");
+    };
+    window.addEventListener("feed-refresh", onFeedRefresh);
     return () => {
       window.removeEventListener("auth-changed", onAuthChanged);
       window.removeEventListener("post-stats-changed", onPostStatsChanged);
+      window.removeEventListener("feed-refresh", onFeedRefresh);
     };
   }, []);
 
@@ -274,10 +281,7 @@ export default function HomePage() {
             onClick={() => loadTab(tab)}
             className="rounded border border-gray-300 bg-white px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 inline-flex items-center gap-1"
           >
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M2 2h5l1.5 2H14a1 1 0 011 1v6a1 1 0 01-1 1H2a1 1 0 01-1-1V3a1 1 0 011-1z" />
-              <path d="M8 7v4M6 9h4" />
-            </svg>
+            <img src="/icon/refresh.svg" alt="refresh" style={{ width: 16, height: 16 }} />
             Refresh
           </button>
         </div>

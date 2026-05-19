@@ -120,3 +120,28 @@ func UpdateUsername(c *gin.Context) {
 	}
 	common.Success(c, user)
 }
+
+// ChangePassword handles PUT /users/password (auth required). Changes the current user's password.
+func ChangePassword(c *gin.Context) {
+	var req model.ChangePasswordRequest
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		common.Error(c, http.StatusBadRequest, common.ErrInvalidParam.WithErr(err))
+		return
+	}
+	userID, _ := c.Get("user_id")
+	req.ID = userID.(int)
+	log.Printf("[ChangePassword] Request: user_id=%d", req.ID)
+
+	if err := service.ChangePassword(req); err != nil {
+		switch err {
+		case common.ErrPasswordError:
+			common.Error(c, http.StatusUnauthorized, common.ErrPasswordError)
+		default:
+			log.Printf("[ChangePassword] Service error: %v", err)
+			common.Error(c, http.StatusInternalServerError, common.ErrInternalParam.WithErr(err))
+		}
+		return
+	}
+	common.Success(c, nil)
+}

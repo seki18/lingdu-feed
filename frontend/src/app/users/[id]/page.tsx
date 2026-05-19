@@ -1,12 +1,13 @@
 'use client';
 
 import { useEffect, useState, use } from "react";
-import { apiFetch, trackInteractionStatus, updateUsername, followUser, unfollowUser } from "@/lib/api";
+import { apiFetch, trackInteractionStatus, followUser, unfollowUser } from "@/lib/api";
 import { getUser } from "@/lib/auth";
 import { useToast } from "@/components/ui/ToastContext";
 import { PostSummary } from "@/types/post";
 import { User } from "@/types/user";
 import Link from "next/link";
+import ProfileModal from "@/components/auth/ProfileModal";
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -25,13 +26,11 @@ export default function UserPage({ params }: Props) {
   const [editContent, setEditContent] = useState("");
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState<number | null>(null);
-  const [editingUsername, setEditingUsername] = useState(false);
-  const [newUsername, setNewUsername] = useState("");
-  const [savingUsername, setSavingUsername] = useState(false);
   const [following, setFollowing] = useState(false);
   const [followLoading, setFollowLoading] = useState(false);
   const [followingCount, setFollowingCount] = useState(0);
   const [followerCount, setFollowerCount] = useState(0);
+  const [profileModalOpen, setProfileModalOpen] = useState(false);
   const currentUser = getUser();
   const isOwner = currentUser && Number(id) === currentUser.id;
   const { addToast } = useToast();
@@ -186,6 +185,15 @@ export default function UserPage({ params }: Props) {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {isOwner && (
+            <button
+              className="rounded border px-4 py-2 text-sm hover:bg-gray-100 inline-flex items-center gap-1"
+              onClick={() => setProfileModalOpen(true)}
+            >
+              <img src="/icon/edit.svg" alt="edit" style={{ width: 16, height: 16 }} />
+              Edit Profile
+            </button>
+          )}
           {!isOwner && currentUser && (
             <button
               onClick={handleFollow}
@@ -199,62 +207,21 @@ export default function UserPage({ params }: Props) {
               {followLoading ? "..." : following ? "Unfollow" : "Follow"}
             </button>
           )}
-          <Link href="/" className="rounded border px-4 py-2 text-sm hover:bg-gray-50">Back</Link>
+          <Link href="/" className="rounded border px-4 py-2 text-sm hover:bg-gray-50 inline-flex items-center gap-1">
+            <img src="/icon/back.svg" alt="back" style={{ width: 16, height: 16 }} />
+            Back
+          </Link>
         </div>
       </div>
 
-      {/* Username edit (owner only) */}
-      {isOwner && (
-        <div className="rounded border bg-gray-50 p-4">
-          {editingUsername ? (
-            <div className="flex items-center gap-2">
-              <input
-                className="flex-1 rounded border p-2"
-                value={newUsername}
-                onChange={(e) => setNewUsername(e.target.value)}
-                disabled={savingUsername}
-                placeholder={user?.username || "New username"}
-              />
-              <button
-                className="rounded bg-black px-4 py-2 text-white text-sm disabled:opacity-50"
-                disabled={savingUsername || !newUsername.trim()}
-                onClick={async () => {
-                  setSavingUsername(true);
-                  try {
-                    const res = await updateUsername(newUsername.trim());
-                    if (res.code === 200) {
-                      addToast("Username updated!", { type: "success", title: "Success" });
-                      setUser((u) => u ? { ...u, username: newUsername.trim() } : u);
-                      setEditingUsername(false);
-                    } else {
-                      addToast(res.message || "Failed to update.", { type: "error", title: "Error" });
-                    }
-                  } catch {
-                    addToast("Network error.", { type: "error", title: "Error" });
-                  } finally {
-                    setSavingUsername(false);
-                  }
-                }}
-              >
-                {savingUsername ? "Saving..." : "Save"}
-              </button>
-              <button
-                className="rounded border px-4 py-2 text-sm"
-                onClick={() => setEditingUsername(false)}
-                disabled={savingUsername}
-              >
-                Cancel
-              </button>
-            </div>
-          ) : (
-            <button
-              className="rounded border px-4 py-2 text-sm hover:bg-gray-100"
-              onClick={() => { setNewUsername(user?.username || ""); setEditingUsername(true); }}
-            >
-              Edit Username
-            </button>
-          )}
-        </div>
+      {/* Profile Modal */}
+      {user && (
+        <ProfileModal
+          open={profileModalOpen}
+          onClose={() => setProfileModalOpen(false)}
+          user={user}
+          onUserUpdated={(updated) => setUser(updated)}
+        />
       )}
 
       <section>
@@ -324,8 +291,12 @@ export default function UserPage({ params }: Props) {
                         </span>
                         {isOwner && (
                           <div className="flex gap-1 ml-2">
-                            <button onClick={() => handleEdit(post)} className="rounded border px-3 py-1 text-sm hover:bg-gray-100">Edit</button>
-                            <button onClick={() => handleDeletePost(post.id)} disabled={deleting === post.id} className="rounded border border-red-300 px-3 py-1 text-sm text-red-600 hover:bg-red-50 disabled:opacity-50">{deleting === post.id ? "..." : "Delete"}</button>
+                            <button onClick={() => handleEdit(post)} className="rounded border px-3 py-1 text-sm hover:bg-gray-100 inline-flex items-center gap-1">
+                              <img src="/icon/edit.svg" alt="edit" style={{ width: 14, height: 14 }} />Edit
+                            </button>
+                            <button onClick={() => handleDeletePost(post.id)} disabled={deleting === post.id} className="rounded border border-red-300 px-3 py-1 text-sm text-red-600 hover:bg-red-50 disabled:opacity-50 inline-flex items-center gap-1">
+                              <img src="/icon/delete.svg" alt="delete" style={{ width: 14, height: 14 }} />{deleting === post.id ? "..." : "Delete"}
+                            </button>
                           </div>
                         )}
                       </div>

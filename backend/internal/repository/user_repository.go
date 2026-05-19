@@ -52,3 +52,11 @@ func UpdateUserName(user model.User) (model.User, error) {
 
 	return user, err
 }
+
+// UpdatePassword updates the password hash for a user by ID.
+func UpdatePassword(userID int, hashedPassword string) error {
+	_, err := common.DB.Exec(`
+		UPDATE users SET password = $2 WHERE id = $1
+	`, userID, hashedPassword)
+	return err
+}

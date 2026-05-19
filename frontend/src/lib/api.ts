@@ -116,6 +116,14 @@ export async function updateUsername(username: string): Promise<ApiResponse> {
   });
 }
 
+// changePassword sends a PUT /users/password request to change the current user's password (auth required).
+export async function changePassword(oldPassword: string, newPassword: string): Promise<ApiResponse> {
+  return apiFetch("/users/password", {
+    method: "PUT",
+    body: JSON.stringify({ old_password: oldPassword, new_password: newPassword }),
+  });
+}
+
 // followUser follows a user (auth required).
 export async function followUser(followingId: number): Promise<ApiResponse> {
   return apiFetch("/Follows", {
