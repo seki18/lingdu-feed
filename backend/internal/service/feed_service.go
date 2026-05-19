@@ -12,17 +12,18 @@ import (
 func GetRecommendPosts(requestType string, excludeIDs []int, userID int) ([]model.Posts, error) {
 	count := feedCount(requestType)
 
-	// Part A: Recommend > half
-	recCount := count/2 + 1
-	recommendIDs, _ := repository.GetRecommendPostIDs(recCount, excludeIDs)
-
-	// Part B: Recent 2/3 + Following 1/3 of remaining
-	remainder := count - len(recommendIDs)
-	recentCount := remainder * 2 / 3
-	followingCount := remainder - recentCount
+	// Part A: Recommend 1/2 of total, excluding already seen posts. This is the core of the "recommend" feed.
+	recentCount := count / 3
+	followingCount := count * 1 / 6
 
 	recentIDs, _ := repository.GetRecentPostIDs(recentCount, excludeIDs, userID)
 	followingIDs, _ := repository.GetFollowingPostIDs(followingCount, excludeIDs, userID, true)
+
+	// Part B: Fill the rest with more recommend posts, excluding all already seen IDs from A. This ensures we always return "count" posts if available.
+	recCount := count - len(recentIDs) - len(followingIDs)
+	recExcludeIDs := append(excludeIDs, recentIDs...)
+	recExcludeIDs = append(recExcludeIDs, followingIDs...)
+	recommendIDs, _ := repository.GetRecommendPostIDs(recCount, recExcludeIDs, userID)
 
 	// Build result: recommend first, then randomly interleave recent+following
 	// Use a seen set to prevent duplicates across the three sources
@@ -52,8 +53,8 @@ func GetRecommendPosts(requestType string, excludeIDs []int, userID int) ([]mode
 	if err != nil {
 		return nil, err
 	}
-	log.Printf("[GetRecommendPosts] rec=%d recent=%d following=%d posts=%d",
-		len(recommendIDs), len(recentIDs), len(followingIDs), len(posts))
+	log.Printf("[GetRecommendPosts][recommendIDs=%v recentIDs=%v followingIDs=%v] posts=%d count=%d",
+		recommendIDs, recentIDs, followingIDs, len(posts), count)
 	return posts, nil
 }
 
@@ -68,7 +69,7 @@ func GetFollowingPosts(requestType string, excludeIDs []int, userID int) ([]mode
 	if err != nil {
 		return nil, err
 	}
-	log.Printf("[GetFollowingPosts] ids=%v posts=%d", ids, len(posts))
+	log.Printf("[GetFollowingPosts] ids=%v posts=%d count=%d", ids, len(posts), count)
 	return posts, nil
 }
 

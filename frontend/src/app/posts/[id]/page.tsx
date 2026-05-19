@@ -71,7 +71,10 @@ export default function PostDetailPage({ params }: Props) {
           setPraiseCount(data.post.praise_count ?? 0);
           setCommentCount(data.post.comment_count ?? 0);
           setCollectionCount(data.post.collection_count ?? 0);
-          setViewCount(data.post.view_count ?? 0);
+          // Optimistically show view count +1 (click happens before API returns)
+          const apiViewCount = data.post.view_count ?? 0;
+          setViewCount(cachedViewCount === 0 ? Math.max(apiViewCount, 1) : apiViewCount);
+          markPostDirty(Number(id));
           // Comments come from the API now, not CommentSection
           if (data.comments) setInitialComments(data.comments);
         } else {

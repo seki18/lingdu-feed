@@ -96,12 +96,27 @@ export default function HomePage() {
     setPosts([]);
     setDeliveredIds([]);
     setHasMore(true);
+    skipObserver.current = true;
     const endpoint = t === "recommend" ? "/feed/recommend" : "/feed/following";
     await fetchFeed(endpoint, "initial", false);
-    for (let tries = 0; tries < 5 && document.documentElement.scrollHeight <= window.innerHeight; tries++) {
+    // Fill page, waiting for React render between each batch
+    for (let tries = 0; tries < 5; tries++) {
+      await new Promise<void>(r => requestAnimationFrame(() => r()));
+      if (document.documentElement.scrollHeight > window.innerHeight) break;
       const fetched = await fetchFeed(endpoint, "subsequent", true);
       if (fetched === 0) break;
     }
+    // Re-enable observer after user scrolls (not just a timer)
+    const onFirstScroll = () => {
+      skipObserver.current = false;
+      window.removeEventListener("scroll", onFirstScroll, { capture: true });
+    };
+    window.addEventListener("scroll", onFirstScroll, { capture: true });
+    // Fallback: re-enable after 2s if user never scrolls
+    setTimeout(() => {
+      skipObserver.current = false;
+      window.removeEventListener("scroll", onFirstScroll, { capture: true });
+    }, 2000);
     // Write to module-level cache
     feedCache = {
       tab: t,
@@ -129,8 +144,16 @@ export default function HomePage() {
         setDeliveredIds(feedCache.deliveredIds);
         setHasMore(feedCache.hasMore);
         batchTrackDelivery(feedCache.posts.map(p => p.id));
-        // Re-enable observer after posts render
-        setTimeout(() => { skipObserver.current = false; }, 100);
+        // Re-enable observer after user scrolls
+        const onFirstScroll = () => {
+          skipObserver.current = false;
+          window.removeEventListener("scroll", onFirstScroll, { capture: true });
+        };
+        window.addEventListener("scroll", onFirstScroll, { capture: true });
+        setTimeout(() => {
+          skipObserver.current = false;
+          window.removeEventListener("scroll", onFirstScroll, { capture: true });
+        }, 2000);
 
         // Fetch updated stats for posts that were interacted with on the detail page
         const ids = consumeDirtyPostIds();
@@ -247,6 +270,7 @@ export default function HomePage() {
   useEffect(() => { loadingRef.current = loading || loadingMore; }, [loading, loadingMore]);
 
   useEffect(() => {
+    if (skipObserver.current) return;
     if (observerRef.current) observerRef.current.disconnect();
     observerRef.current = new IntersectionObserver((entries) => {
       if (skipObserver.current) return;

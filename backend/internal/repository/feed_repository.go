@@ -13,19 +13,18 @@ import (
 func GetRecentPostIDs(count int, excludeIDs []int, userID int) ([]int, error) {
 	query := `
 		SELECT p.id
-		FROM posts as p
-		LEFT JOIN interaction_status as s
-		ON p.id = s.post_id`
+		FROM posts as p`
 	var args []any
 
 	if userID != -1 {
-		query += ` AND s.user_id = ?`
-		args = append(args, userID)
+		query += `
+		LEFT JOIN interaction_status as s 
+		ON p.id = s.post_id AND s.user_id = ?
+		WHERE (s.status IS NULL OR s.status <= ?)`
+		args = append(args, userID, model.FeedDisplay)
+	} else {
+		query += ` WHERE 1=1`
 	}
-
-	query += `
-		WHERE s.status IS NULL OR s.status <= ?`
-	args = append(args, model.FeedDisplay)
 
 	if len(excludeIDs) > 0 {
 		query += ` AND p.id NOT IN (?)`
@@ -130,20 +129,25 @@ func GetCollectionPostIDs(userID, page, pageSize int) ([]int, int, error) {
 
 // GetRecommendPostIDs returns post IDs ranked by weighted score (recency * 0.1
 // + views*3 + praises*5 + collections*4 + comments*4). Returns count posts.
-func GetRecommendPostIDs(count int, excludeIDs []int) ([]int, error) {
+func GetRecommendPostIDs(count int, excludeIDs []int, userID int) ([]int, error) {
 	query := `
-		SELECT p.id FROM posts p
-		WHERE 1=1`
+		SELECT p.id FROM posts p`
 	var args []any
+
+	if userID != -1 {
+		query += `
+		LEFT JOIN interaction_status as s 
+		ON p.id = s.post_id AND s.user_id = ?
+		WHERE (s.status IS NULL OR s.status <= ?)`
+		args = append(args, userID, model.FeedDisplay)
+	} else {
+		query += ` WHERE 1=1`
+	}
 
 	if len(excludeIDs) > 0 {
 		query += ` AND p.id NOT IN (?)`
 		args = append(args, excludeIDs)
 	}
-
-	query += `
-		WHERE s.status IS NULL OR s.status <= ?`
-	args = append(args, model.FeedDisplay)
 
 	query += `
 		ORDER BY (
