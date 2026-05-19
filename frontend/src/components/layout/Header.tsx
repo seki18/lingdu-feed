@@ -50,15 +50,6 @@ export default function Header() {
 
         {user ? (
           <div className="flex items-center gap-2">
-            <button
-              onClick={() => window.dispatchEvent(new CustomEvent("open-create-post"))}
-              className="rounded bg-black px-4 py-2 text-sm text-white inline-flex items-center gap-1"
-            >
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2">
-                <line x1="8" y1="1" x2="8" y2="15" /><line x1="1" y1="8" x2="15" y2="8" />
-              </svg>
-              New Post
-            </button>
             <div
               className="relative"
               onMouseEnter={() => setMenuOpen(true)}

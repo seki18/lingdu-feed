@@ -142,6 +142,10 @@ func GetRecommendPostIDs(count int, excludeIDs []int) ([]int, error) {
 	}
 
 	query += `
+		WHERE s.status IS NULL OR s.status <= ?`
+	args = append(args, model.FeedDisplay)
+
+	query += `
 		ORDER BY (
 			EXTRACT(EPOCH FROM p.created_time) * 0.1 +
 			p.view_count * 3 +

@@ -21,5 +21,6 @@ func PostRoutes(r *gin.Engine) {
 	posts.Use(middleware.SoftAuthMiddleware())
 	{
 		posts.GET("/:id", handler.GetPostDetail)
+		posts.POST("/batch-stats", handler.BatchGetPostStats)
 	}
 }

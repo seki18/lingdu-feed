@@ -2,7 +2,6 @@ package service
 
 import (
 	"log"
-	"math/rand"
 
 	"github.com/seki18/lingdu-feed/internal/model"
 	"github.com/seki18/lingdu-feed/internal/repository"
@@ -26,12 +25,28 @@ func GetRecommendPosts(requestType string, excludeIDs []int, userID int) ([]mode
 	followingIDs, _ := repository.GetFollowingPostIDs(followingCount, excludeIDs, userID, true)
 
 	// Build result: recommend first, then randomly interleave recent+following
-	result := make([]int, len(recommendIDs))
-	copy(result, recommendIDs)
+	// Use a seen set to prevent duplicates across the three sources
+	seen := make(map[int]bool, count)
+	result := make([]int, 0, count)
 
-	rest := append(recentIDs, followingIDs...)
-	rand.Shuffle(len(rest), func(i, j int) { rest[i], rest[j] = rest[j], rest[i] })
-	result = append(result, rest...)
+	for _, id := range recommendIDs {
+		if !seen[id] {
+			seen[id] = true
+			result = append(result, id)
+		}
+	}
+	for _, id := range recentIDs {
+		if !seen[id] {
+			seen[id] = true
+			result = append(result, id)
+		}
+	}
+	for _, id := range followingIDs {
+		if !seen[id] {
+			seen[id] = true
+			result = append(result, id)
+		}
+	}
 
 	posts, err := repository.GetPostsByIDs(result)
 	if err != nil {

@@ -76,5 +76,9 @@ func DeleteCollection(c *gin.Context) {
 		common.Error(c, http.StatusInternalServerError, common.ErrInternalParam.WithErr(err))
 		return
 	}
+
+	// Sync post collection_count
+	_ = repository.DecrCollectionCount(req.PostID)
+
 	common.Success(c, nil)
 }

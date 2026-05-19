@@ -9,12 +9,13 @@ import (
 	"github.com/jmoiron/sqlx"
 )
 
-// GetPostContentByID retrieves post content fields by primary key (no counts).
+// GetPostContentByID retrieves post content fields by primary key.
 func GetPostContentByID(id int) (model.Post, error) {
 	var post model.Post
 
 	err := common.DB.Get(&post, `
 		SELECT p.id, p.user_id, u.username, p.title, p.content,
+			p.praise_count, p.comment_count, p.collection_count, p.view_count,
 			p.created_time, p.updated_time
 		FROM posts p
 		JOIN users u ON u.id = p.user_id
@@ -82,7 +83,7 @@ func DeletePostByID(id int64) error {
 }
 
 // GetPostsByIDs returns post summary rows for the given IDs, preserving the
-// order of the supplied slice.
+// order of the supplied slice by re-sorting in Go after the SQL query.
 func GetPostsByIDs(ids []int) ([]model.Posts, error) {
 	if len(ids) == 0 {
 		return []model.Posts{}, nil
@@ -102,11 +103,75 @@ func GetPostsByIDs(ids []int) ([]model.Posts, error) {
 	}
 	query = common.DB.Rebind(query)
 
-	var posts []model.Posts
-	if err := common.DB.Select(&posts, query, args...); err != nil {
+	var rows []model.Posts
+	if err := common.DB.Select(&rows, query, args...); err != nil {
 		return nil, err
 	}
-	return posts, nil
+
+	// Re-sort rows to match input ID order (deduplicated: only first occurrence gets the row)
+	idIndex := make(map[int]int, len(ids))
+	seen := make(map[int]bool, len(ids))
+	for i, id := range ids {
+		if !seen[id] {
+			idIndex[id] = i
+			seen[id] = true
+		}
+	}
+	posts := make([]model.Posts, len(ids))
+	written := 0
+	for _, row := range rows {
+		if idx, ok := idIndex[row.ID]; ok {
+			posts[idx] = row
+			written++
+		}
+	}
+	return posts[:written], nil
+}
+
+// GetPostStatsByIDs returns lightweight stat records for the given post IDs,
+// preserving input order. Only fetches count columns (no content).
+func GetPostStatsByIDs(ids []int) ([]model.Posts, error) {
+	if len(ids) == 0 {
+		return []model.Posts{}, nil
+	}
+
+	query := `
+		SELECT p.id, p.user_id, u.username, p.title,
+			p.praise_count, p.comment_count, p.collection_count, p.view_count,
+			p.created_time
+		FROM posts as p
+		LEFT JOIN users as u ON p.user_id = u.id
+		WHERE p.id IN (?)
+	`
+	query, args, err := sqlx.In(query, ids)
+	if err != nil {
+		return nil, err
+	}
+	query = common.DB.Rebind(query)
+
+	var rows []model.Posts
+	if err := common.DB.Select(&rows, query, args...); err != nil {
+		return nil, err
+	}
+
+	// Re-sort rows to match input ID order (deduplicated: only first occurrence gets the row)
+	idIndex := make(map[int]int, len(ids))
+	seen := make(map[int]bool, len(ids))
+	for i, id := range ids {
+		if !seen[id] {
+			idIndex[id] = i
+			seen[id] = true
+		}
+	}
+	posts := make([]model.Posts, len(ids))
+	written := 0
+	for _, row := range rows {
+		if idx, ok := idIndex[row.ID]; ok {
+			posts[idx] = row
+			written++
+		}
+	}
+	return posts[:written], nil
 }
 
 // GetPostsByUserID returns posts authored by the given user, newest first, with pagination.

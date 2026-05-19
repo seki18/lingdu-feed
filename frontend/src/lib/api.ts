@@ -2,6 +2,19 @@ import { getToken } from "./auth";
 
 const BASE_URL = "http://localhost:18080";
 
+// ── Dirty post tracker (module-level, survives component remounts) ──
+// Detail page sets dirtyPostId when user interacts (like/collect/comment).
+// Feed page reads & clears it after restoring from cache.
+let dirtyPostIds = new Set<number>();
+export function markPostDirty(postId: number): void {
+  dirtyPostIds.add(postId);
+}
+export function consumeDirtyPostIds(): number[] {
+  const ids = Array.from(dirtyPostIds);
+  dirtyPostIds.clear();
+  return ids;
+}
+
 // ApiResponse is the standard JSON envelope returned by all backend endpoints.
 export interface ApiResponse<T = any> {
   code: number;
@@ -59,10 +72,12 @@ function flushBatch() {
 }
 
 // trackInteractionStatus tracks user interactions with posts (delivery=1, display=2, click=3).
-// Skips if the new status is not higher than what was already recorded locally.
+// Skips if the new status is not higher than what was already recorded locally,
+// EXCEPT for status=3 (click) which is always sent to update updated_time for history ordering.
 export function trackInteractionStatus(postId: number, status: 1 | 2 | 3): void {
   const prev = statusCache.get(postId) ?? 0;
-  if (status <= prev) return;
+  if (status < prev) return;
+  if (status === prev && status !== 3) return;
   statusCache.set(postId, status);
 
   pendingBatch.push({ post_id: postId, status });

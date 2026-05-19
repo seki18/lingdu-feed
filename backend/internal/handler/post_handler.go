@@ -8,6 +8,7 @@ import (
 
 	"github.com/seki18/lingdu-feed/internal/common"
 	"github.com/seki18/lingdu-feed/internal/model"
+	"github.com/seki18/lingdu-feed/internal/repository"
 	"github.com/seki18/lingdu-feed/internal/service"
 
 	"github.com/gin-gonic/gin"
@@ -110,4 +111,28 @@ func GetPostDetail(c *gin.Context) {
 	}
 
 	common.Success(c, detail)
+}
+
+// BatchGetPostStats handles POST /posts/batch-stats (soft auth).
+// Accepts { post_ids: [1, 2, 3] } and returns lightweight post summaries
+// in the same order. Used by the feed page to update cached post stats
+// without triggering a full feed re-fetch.
+func BatchGetPostStats(c *gin.Context) {
+	var req struct {
+		PostIDs []int `json:"post_ids"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		common.Error(c, http.StatusBadRequest, common.ErrInvalidParam.WithErr(err))
+		return
+	}
+	if len(req.PostIDs) == 0 {
+		common.Success(c, []model.Posts{})
+		return
+	}
+	posts, err := repository.GetPostStatsByIDs(req.PostIDs)
+	if err != nil {
+		common.Error(c, http.StatusInternalServerError, common.ErrInternalParam.WithErr(err))
+		return
+	}
+	common.Success(c, posts)
 }

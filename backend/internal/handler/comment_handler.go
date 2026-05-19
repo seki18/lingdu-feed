@@ -67,3 +67,36 @@ func DeleteCommentByID(c *gin.Context) {
 
 	common.Success(c, nil)
 }
+
+// GetCommentsByPostID handles GET /comments/by-post/:post_id (soft auth).
+// Returns all comments for a given post, ordered by creation time.
+func GetCommentsByPostID(c *gin.Context) {
+	postID, err := strconv.Atoi(c.Param("post_id"))
+	if err != nil || postID <= 0 {
+		common.Error(c, http.StatusBadRequest, common.ErrInvalidParam)
+		return
+	}
+	comments, err := repository.GetCommentsByPostID(postID)
+	if err != nil {
+		common.Error(c, http.StatusInternalServerError, common.ErrInternalParam.WithErr(err))
+		return
+	}
+	common.Success(c, comments)
+}
+
+// GetCommentCountByPostID handles GET /comments/count/:post_id (soft auth).
+// Returns the number of comments for a given post.
+func GetCommentCountByPostID(c *gin.Context) {
+	postID, err := strconv.Atoi(c.Param("post_id"))
+	if err != nil || postID <= 0 {
+		common.Error(c, http.StatusBadRequest, common.ErrInvalidParam)
+		return
+	}
+	var count int
+	err = common.DB.Get(&count, `SELECT COUNT(*) FROM comments WHERE post_id = $1`, postID)
+	if err != nil {
+		common.Error(c, http.StatusInternalServerError, common.ErrInternalParam.WithErr(err))
+		return
+	}
+	common.Success(c, map[string]int{"count": count})
+}

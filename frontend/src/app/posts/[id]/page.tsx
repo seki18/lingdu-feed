@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState, use } from "react";
 import { useSearchParams } from "next/navigation";
-import { apiFetch } from "@/lib/api";
+import { apiFetch, markPostDirty } from "@/lib/api";
 import { useToast } from "@/components/ui/ToastContext";
 import { PostDetail } from "@/types/post";
 import { CommentItem } from "@/types/comment";
@@ -66,12 +66,12 @@ export default function PostDetailPage({ params }: Props) {
         // New API: {post, has_praised, has_collected, comments}
         if (data?.post) {
           setPost(data.post);
-          if (!cachedHasPraised) setHasPraised(data.has_praised ?? false);
-          if (!cachedHasCollected) setHasCollected(data.has_collected ?? false);
-          if (cachedPraiseCount < 0) setPraiseCount(data.post.praise_count ?? 0);
-          if (cachedCommentCount < 0) setCommentCount(data.post.comment_count ?? 0);
-          if (cachedCollectionCount < 0) setCollectionCount(data.post.collection_count ?? 0);
-          if (cachedViewCount < 0) setViewCount(data.post.view_count ?? 0);
+          setHasPraised(data.has_praised ?? false);
+          setHasCollected(data.has_collected ?? false);
+          setPraiseCount(data.post.praise_count ?? 0);
+          setCommentCount(data.post.comment_count ?? 0);
+          setCollectionCount(data.post.collection_count ?? 0);
+          setViewCount(data.post.view_count ?? 0);
           // Comments come from the API now, not CommentSection
           if (data.comments) setInitialComments(data.comments);
         } else {
@@ -129,10 +129,20 @@ export default function PostDetailPage({ params }: Props) {
     try {
       if (hasPraised) {
         const res = await apiFetch("/Praises", { method: "DELETE", body: JSON.stringify({ post_id: Number(id) }) });
-        if (res.code === 200) { setHasPraised(false); setPraiseCount((c) => Math.max(0, c - 1)); }
+        if (res.code === 200) {
+          setHasPraised(false);
+          setPraiseCount((c) => Math.max(0, c - 1));
+          markPostDirty(Number(id));
+          window.dispatchEvent(new CustomEvent("post-stats-changed", { detail: { postId: Number(id), praiseCount: praiseCount - 1, hasPraised: false } }));
+        }
       } else {
         const res = await apiFetch("/Praises", { method: "POST", body: JSON.stringify({ post_id: Number(id) }) });
-        if (res.code === 200) { setHasPraised(true); setPraiseCount((c) => c + 1); }
+        if (res.code === 200) {
+          setHasPraised(true);
+          setPraiseCount((c) => c + 1);
+          markPostDirty(Number(id));
+          window.dispatchEvent(new CustomEvent("post-stats-changed", { detail: { postId: Number(id), praiseCount: praiseCount + 1, hasPraised: true } }));
+        }
       }
     } catch { addToast("Network error.", { type: "error", title: "Error" }); }
     finally { setPraising(false); }
@@ -146,10 +156,20 @@ export default function PostDetailPage({ params }: Props) {
     try {
       if (hasCollected) {
         const res = await apiFetch("/Collections", { method: "DELETE", body: JSON.stringify({ post_id: Number(id) }) });
-        if (res.code === 200) { setHasCollected(false); setCollectionCount((c) => Math.max(0, c - 1)); }
+        if (res.code === 200) {
+          setHasCollected(false);
+          setCollectionCount((c) => Math.max(0, c - 1));
+          markPostDirty(Number(id));
+          window.dispatchEvent(new CustomEvent("post-stats-changed", { detail: { postId: Number(id), collectionCount: collectionCount - 1, hasCollected: false } }));
+        }
       } else {
         const res = await apiFetch("/Collections", { method: "POST", body: JSON.stringify({ post_id: Number(id) }) });
-        if (res.code === 200) { setHasCollected(true); setCollectionCount((c) => c + 1); }
+        if (res.code === 200) {
+          setHasCollected(true);
+          setCollectionCount((c) => c + 1);
+          markPostDirty(Number(id));
+          window.dispatchEvent(new CustomEvent("post-stats-changed", { detail: { postId: Number(id), collectionCount: collectionCount + 1, hasCollected: true } }));
+        }
       }
     } catch { addToast("Network error.", { type: "error", title: "Error" }); }
     finally { setCollecting(false); }

@@ -15,4 +15,11 @@ func CommentRoutes(r *gin.Engine) {
 		commentAuth.POST("", handler.CreateComment)
 		commentAuth.DELETE("/:id", handler.DeleteCommentByID)
 	}
+
+	commentPublic := r.Group("/comments")
+	commentPublic.Use(middleware.SoftAuthMiddleware())
+	{
+		commentPublic.GET("/by-post/:post_id", handler.GetCommentsByPostID)
+		commentPublic.GET("/count/:post_id", handler.GetCommentCountByPostID)
+	}
 }

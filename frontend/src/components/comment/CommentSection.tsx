@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef } from "react";
 import Link from "next/link";
-import { apiFetch } from "@/lib/api";
+import { apiFetch, markPostDirty } from "@/lib/api";
 import { useToast } from "@/components/ui/ToastContext";
 import { CommentItem } from "@/types/comment";
 import { getUser } from "@/lib/auth";
@@ -37,8 +37,8 @@ export default function CommentSection({ postId, initialComments, initialComment
     setCurrentUserId(u?.id ?? null);
   }, []);
 
-  const fetchComments = async () => {
-    if (initialLoaded.current) return;
+  const fetchComments = async (force = false) => {
+    if (!force && initialLoaded.current) return;
     setLoading(true);
     try {
       const [commentRes, countRes] = await Promise.all([
@@ -76,7 +76,8 @@ export default function CommentSection({ postId, initialComments, initialComment
       if (res.code === 200) {
         setContent("");
         addToast("Comment added.", { type: "success", title: "Success" });
-        await fetchComments();
+        markPostDirty(Number(postId));
+        await fetchComments(true);
       } else {
         addToast(res.message || "Failed to add comment.", { type: "error", title: "Error" });
       }
@@ -103,7 +104,8 @@ export default function CommentSection({ postId, initialComments, initialComment
         setReplyTo(null);
         setReplyContent("");
         addToast("Reply added.", { type: "success", title: "Success" });
-        await fetchComments();
+        markPostDirty(Number(postId));
+        await fetchComments(true);
       } else {
         addToast(res.message || "Failed to reply.", { type: "error", title: "Error" });
       }
@@ -120,7 +122,8 @@ export default function CommentSection({ postId, initialComments, initialComment
       const res = await apiFetch(`/comments/${commentId}`, { method: "DELETE" });
       if (res.code === 200) {
         addToast("Comment deleted.", { type: "success", title: "Deleted" });
-        await fetchComments();
+        markPostDirty(Number(postId));
+        await fetchComments(true);
       } else {
         addToast(res.message || "Failed to delete.", { type: "error", title: "Error" });
       }
