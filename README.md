@@ -1,8 +1,13 @@
 # Lingdu Feed
 
-A community content feed platform with **Go (Gin)** + **Next.js 16 (React 19)** + **PostgreSQL**.
+A community content feed platform built with **Go (Gin)** + **Next.js 16 (React 19)** + **PostgreSQL + Redis**.
 
-Publish posts, browse a hybrid recommendation feed, like/favorite/comment, follow users, and track reading history. The feed blends trending, recent, and social signals with a delivery pipeline (`delivered → exposed → clicked`) to deduplicate seen content.
+This system is designed as a **feed-based recommendation backend**, focusing on:
+
+- hybrid ranking feed generation
+- state-based deduplication pipeline
+- user behavior tracking signals
+- scalable backend architecture (Handler → Service → Repository)
 
 ---
 
@@ -14,8 +19,8 @@ Publish posts, browse a hybrid recommendation feed, like/favorite/comment, follo
 | **Posts** | CRUD with title + content, owner-only edit/delete |
 | **Comments** | Nested replies, cascade delete |
 | **Social** | Like/unlike, favorite/unfavorite, follow/unfollow |
-| **Feeds** | Recommend (hybrid), following, user-authored, history, favorites |
-| **Tracking** | Per-user delivery state pipeline with automatic degradation fallback |
+| **Feeds** | Hybrid feed system (recommend + following + history) with state-based deduplication |
+| **Tracking** | State pipeline (delivered → exposed → clicked) for feed deduplication and ranking signals |
 | **API** | Unified JSON envelope `{ code, message, data }` with pagination |
 
 ---
@@ -84,16 +89,28 @@ lingdu-feed/
 
 ---
 
-## Architecture
+## Architecture Overview
 
 ### Backend: Handler → Service → Repository
 
-```
-Router → Middleware (Auth/SoftAuth) → Handler (parse/bind/respond)
-                                       → Service (business logic)
-                                         → Repository (raw SQL via sqlx)
-                                           → Model (structs with db/json tags)
-```
+This architecture enforces strict separation of concerns:
+
+- **Handler**: HTTP layer (request parsing & response formatting only)
+- **Service**: business orchestration (feed composition, interaction logic, state updates)
+- **Repository**: raw SQL layer (sqlx, no business logic)
+
+This design allows:
+- independent scaling of business logic
+- clear separation between API and domain logic
+- easier extension for caching and event tracking
+
+### Design Highlights
+
+- Hybrid feed generation instead of single ranking strategy
+- State-based deduplication instead of naive caching
+- Batch tracking to reduce network overhead
+- Separation of state tracking and future event-based analytics
+- Cursor-based pagination for scalable feed loading
 
 ### Database Schema
 
@@ -199,7 +216,13 @@ Paginated: `{ "items": [...], "total": 42, "page": 1, "page_size": 20 }`
 
 ---
 
-## Feed Algorithm
+## Feed Algorithm (Hybrid Ranking System)
+
+The feed system uses a hybrid ranking strategy combining:
+
+- content freshness
+- user engagement signals
+- social graph signals
 
 ### Scoring
 
@@ -219,7 +242,9 @@ score = recency × 0.1 + views × 3 + likes × 5 + favorites × 4 + comments × 
 
 If normal requests return insufficient posts, the system auto-degrades: refetches from the recommend pool *without* the state filter, allowing previously-seen posts to fill remaining slots. The `excludeIDs` list is always preserved to avoid duplicates on the current page.
 
-### State Pipeline
+### State Pipeline (Feed Deduplication System)
+
+This pipeline ensures feed consistency, deduplication, and interaction signal collection across sessions.
 
 ```
 Delivered (1) → Exposed (2) → Clicked (3)
