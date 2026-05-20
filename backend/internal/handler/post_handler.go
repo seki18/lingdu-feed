@@ -126,7 +126,7 @@ func BatchGetPostStats(c *gin.Context) {
 		return
 	}
 	if len(req.PostIDs) == 0 {
-		common.Success(c, []model.Posts{})
+		common.Success(c, []model.FeedItem{})
 		return
 	}
 	posts, err := repository.GetPostStatsByIDs(req.PostIDs)

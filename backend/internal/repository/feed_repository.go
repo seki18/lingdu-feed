@@ -7,10 +7,9 @@ import (
 	"github.com/jmoiron/sqlx"
 )
 
-// GetRecentPostIDs returns post IDs that should be shown to the user,
-// applying the interaction_status filter. This decouples the feed filtering
-// logic from data fetching so it can be reused for hot / following / etc.
-func GetRecentPostIDs(count int, excludeIDs []int, userID int) ([]int, error) {
+// GetRecentPostIDs returns post IDs that should be shown to the user.
+// When allowDegraded is true, skips the state filter to include already-seen posts.
+func GetRecentPostIDs(count int, excludeIDs []int, userID int, allowDegraded bool) ([]int, error) {
 	query := `
 		SELECT p.id
 		FROM posts as p`
@@ -18,10 +17,10 @@ func GetRecentPostIDs(count int, excludeIDs []int, userID int) ([]int, error) {
 
 	if userID != -1 {
 		query += `
-		LEFT JOIN interaction_status as s 
+		LEFT JOIN states as s 
 		ON p.id = s.post_id AND s.user_id = ?
 		WHERE (s.status IS NULL OR s.status <= ?)`
-		args = append(args, userID, model.FeedDisplay)
+		args = append(args, userID, model.StateDelivered)
 	} else {
 		query += ` WHERE 1=1`
 	}
@@ -51,7 +50,7 @@ func GetRecentPostIDs(count int, excludeIDs []int, userID int) ([]int, error) {
 }
 
 // GetFollowingPostIDs returns post IDs from users that the given user follows.
-// If checkStatus is true, applies the interaction_status filter to skip viewed posts.
+// If checkStatus is true, applies the state filter to skip viewed posts.
 func GetFollowingPostIDs(count int, excludeIDs []int, userID int, checkStatus bool) ([]int, error) {
 	query := `
 		SELECT p.id
@@ -61,10 +60,10 @@ func GetFollowingPostIDs(count int, excludeIDs []int, userID int, checkStatus bo
 
 	if checkStatus {
 		query += `
-		LEFT JOIN interaction_status as s ON p.id = s.post_id AND s.user_id = ?
+		LEFT JOIN states as s ON p.id = s.post_id AND s.user_id = ?
 		WHERE f.follower_id = ?
 		AND (s.status IS NULL OR s.status <= ?)`
-		args = append(args, userID, userID, model.FeedDisplay)
+		args = append(args, userID, userID, model.StateDelivered)
 	} else {
 		query += `
 		WHERE f.follower_id = ?`
@@ -98,29 +97,29 @@ func GetFollowingPostIDs(count int, excludeIDs []int, userID int, checkStatus bo
 // GetHistoryPostIDs returns post IDs that the user has viewed (clicked).
 func GetHistoryPostIDs(userID, page, pageSize int) ([]int, int, error) {
 	var total int
-	if err := common.DB.Get(&total, `SELECT COUNT(1) FROM interaction_status WHERE user_id = $1 AND status = $2`, userID, model.FeedClick); err != nil {
+	if err := common.DB.Get(&total, `SELECT COUNT(1) FROM states WHERE user_id = $1 AND status = $2`, userID, model.StateClicked); err != nil {
 		return nil, 0, err
 	}
 	offset := (page - 1) * pageSize
 	var ids []int
 	err := common.DB.Select(&ids, `
-		SELECT post_id FROM interaction_status
+		SELECT post_id FROM states
 		WHERE user_id = $1 AND status = $2
 		ORDER BY updated_time DESC LIMIT $3 OFFSET $4
-	`, userID, model.FeedClick, pageSize, offset)
+	`, userID, model.StateClicked, pageSize, offset)
 	return ids, total, err
 }
 
-// GetCollectionPostIDs returns post IDs that the user has collected.
-func GetCollectionPostIDs(userID, page, pageSize int) ([]int, int, error) {
+// GetFavoritePostIDs returns post IDs that the user has favorited.
+func GetFavoritePostIDs(userID, page, pageSize int) ([]int, int, error) {
 	var total int
-	if err := common.DB.Get(&total, `SELECT COUNT(1) FROM collections WHERE user_id = $1`, userID); err != nil {
+	if err := common.DB.Get(&total, `SELECT COUNT(1) FROM favorites WHERE user_id = $1`, userID); err != nil {
 		return nil, 0, err
 	}
 	offset := (page - 1) * pageSize
 	var ids []int
 	err := common.DB.Select(&ids, `
-		SELECT post_id FROM collections
+		SELECT post_id FROM favorites
 		WHERE user_id = $1
 		ORDER BY created_time DESC LIMIT $2 OFFSET $3
 	`, userID, pageSize, offset)
@@ -128,18 +127,19 @@ func GetCollectionPostIDs(userID, page, pageSize int) ([]int, int, error) {
 }
 
 // GetRecommendPostIDs returns post IDs ranked by weighted score (recency * 0.1
-// + views*3 + praises*5 + collections*4 + comments*4). Returns count posts.
-func GetRecommendPostIDs(count int, excludeIDs []int, userID int) ([]int, error) {
+// + views*3 + likes*5 + favorites*4 + comments*4). Returns count posts.
+// When allowDegraded is true, skips the state filter to include already-seen posts.
+func GetRecommendPostIDs(count int, excludeIDs []int, userID int, allowDegraded bool) ([]int, error) {
 	query := `
 		SELECT p.id FROM posts p`
 	var args []any
 
-	if userID != -1 {
+	if userID != -1 && !allowDegraded {
 		query += `
-		LEFT JOIN interaction_status as s 
+		LEFT JOIN states as s 
 		ON p.id = s.post_id AND s.user_id = ?
 		WHERE (s.status IS NULL OR s.status <= ?)`
-		args = append(args, userID, model.FeedDisplay)
+		args = append(args, userID, model.StateDelivered)
 	} else {
 		query += ` WHERE 1=1`
 	}
@@ -153,8 +153,8 @@ func GetRecommendPostIDs(count int, excludeIDs []int, userID int) ([]int, error)
 		ORDER BY (
 			EXTRACT(EPOCH FROM p.created_time) * 0.1 +
 			p.view_count * 3 +
-			p.praise_count * 5 +
-			p.collection_count * 4 +
+			p.like_count * 5 +
+			p.favorite_count * 4 +
 			p.comment_count * 4
 		) DESC
 		LIMIT ?

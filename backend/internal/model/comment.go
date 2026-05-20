@@ -13,17 +13,3 @@ type Comment struct {
 	Content       string    `db:"content" json:"content"`
 	CreatedTime   time.Time `db:"created_time" json:"created_time"`
 }
-
-// CreateCommentRequest is the JSON body for POST /comments.
-type CreateCommentRequest struct {
-	PostID  int    `json:"post_id"`
-	UserID  int    `json:"user_id"`
-	ReplyID *int   `json:"reply_id"`
-	Content string `json:"content"`
-}
-
-// DeleteCommentRequest is the JSON body for DELETE /comments.
-type DeleteCommentRequest struct {
-	PostID  int    `json:"post_id"`
-	UserID int `json:"user_id"`
-}

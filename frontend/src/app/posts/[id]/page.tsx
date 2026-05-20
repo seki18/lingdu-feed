@@ -2,10 +2,9 @@
 
 import Link from "next/link";
 import { useEffect, useState, use } from "react";
-import { useSearchParams } from "next/navigation";
-import { apiFetch, markPostDirty } from "@/lib/api";
+import { apiFetch, markPostDirty, likePost, unlikePost, favoritePost, unfavoritePost } from "@/lib/api";
 import { useToast } from "@/components/ui/ToastContext";
-import { PostDetail } from "@/types/post";
+import { Post, PostDetailResponse } from "@/types/post";
 import { CommentItem } from "@/types/comment";
 import { getUser } from "@/lib/auth";
 import { User } from "@/types/user";
@@ -19,25 +18,21 @@ interface Props {
 export default function PostDetailPage({ params }: Props) {
   const { id } = use(params);
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const [post, setPost] = useState<PostDetail | null>(null);
+  const [post, setPost] = useState<Post | null>(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const { addToast } = useToast();
 
-  // Cached data from homepage (passed via searchParams)
-  const cachedTitle = searchParams.get("t") || "";
-  const cachedUsername = searchParams.get("u") || "";
-  const cachedUserId = Number(searchParams.get("uid") ?? 0);
-  const cachedCreatedTime = searchParams.get("ct") || "";
-  const cachedPraiseCount = Number(searchParams.get("pc") ?? -1);
-  const cachedCommentCount = Number(searchParams.get("cc") ?? -1);
-  const cachedCollectionCount = Number(searchParams.get("clc") ?? -1);
-  const cachedViewCount = Number(searchParams.get("vc") ?? -1);
-  const cachedHasPraised = searchParams.get("hp") === "1";
-  const cachedHasCollected = searchParams.get("hc") === "1";
+  // All data comes from the API — no more URL searchParams caching
+  const [likeCount, setLikeCount] = useState(0);
+  const [hasLiked, setHasLiked] = useState(false);
+  const [liking, setLiking] = useState(false);
+  const [hasFavorited, setHasFavorited] = useState(false);
+  const [favoriting, setFavoriting] = useState(false);
+  const [viewCount, setViewCount] = useState(0);
+  const [initialComments, setInitialComments] = useState<CommentItem[] | null>(null);
 
   useEffect(() => {
     const u = getUser();
@@ -50,7 +45,7 @@ export default function PostDetailPage({ params }: Props) {
       setNotFound(false);
 
       try {
-        const response = await apiFetch(`/posts/${id}`);
+        const response = await apiFetch<PostDetailResponse>(`/api/posts/${id}`);
         if (response.code !== 200) {
           if (response.code === 40004) {
             setNotFound(true);
@@ -63,23 +58,14 @@ export default function PostDetailPage({ params }: Props) {
           return;
         }
         const data = response.data;
-        // New API: {post, has_praised, has_collected, comments}
         if (data?.post) {
           setPost(data.post);
-          setHasPraised(data.has_praised ?? false);
-          setHasCollected(data.has_collected ?? false);
-          setPraiseCount(data.post.praise_count ?? 0);
-          setCommentCount(data.post.comment_count ?? 0);
-          setCollectionCount(data.post.collection_count ?? 0);
-          // Optimistically show view count +1 (click happens before API returns)
-          const apiViewCount = data.post.view_count ?? 0;
-          setViewCount(cachedViewCount === 0 ? Math.max(apiViewCount, 1) : apiViewCount);
-          markPostDirty(Number(id));
-          // Comments come from the API now, not CommentSection
-          if (data.comments) setInitialComments(data.comments);
-        } else {
-          // Fallback for old API
-          setPost(data);
+          setHasLiked(data.has_liked ?? false);
+          setHasFavorited(data.has_favorited ?? false);
+          setLikeCount(data.post.like_count ?? 0);
+          setViewCount(Math.max(data.post.view_count ?? 0, 1)); // optimistically +1 for this view
+          setInitialComments(data.comments ?? []);
+          // Only mark dirty on actual interactions (like/favorite/comment), not on page view
         }
       } catch (error) {
         addToast("Unable to load post.", {
@@ -99,7 +85,7 @@ export default function PostDetailPage({ params }: Props) {
     if (!confirm("Are you sure you want to delete this post?")) return;
     setDeleting(true);
     try {
-      const res = await apiFetch(`/posts/${id}`, { method: "DELETE" });
+      const res = await apiFetch(`/api/posts/${id}`, { method: "DELETE" });
       if (res.code === 200) {
         addToast("Post deleted.", { type: "success", title: "Deleted" });
         router.push("/");
@@ -113,70 +99,55 @@ export default function PostDetailPage({ params }: Props) {
     }
   };
 
-  // --- Stats (from homepage cache or single API call) ---
-  const [praiseCount, setPraiseCount] = useState(cachedPraiseCount >= 0 ? cachedPraiseCount : 0);
-  const [hasPraised, setHasPraised] = useState(cachedHasPraised);
-  const [praising, setPraising] = useState(false);
-  const [hasCollected, setHasCollected] = useState(cachedHasCollected);
-  const [collecting, setCollecting] = useState(false);
-  const [commentCount, setCommentCount] = useState(cachedCommentCount >= 0 ? cachedCommentCount : 0);
-  const [collectionCount, setCollectionCount] = useState(cachedCollectionCount >= 0 ? cachedCollectionCount : 0);
-  const [viewCount, setViewCount] = useState(cachedViewCount >= 0 ? cachedViewCount : 0);
-  const [initialComments, setInitialComments] = useState<CommentItem[] | null>(null);
-
-  // Stats come from the detail API — no separate /stats call needed
-
-  const handlePraise = async () => {
+  const handleLike = async () => {
     if (!currentUser) { addToast("Please log in to like.", { type: "warning", title: "Not logged in" }); return; }
-    setPraising(true);
+    setLiking(true);
     try {
-      if (hasPraised) {
-        const res = await apiFetch("/Praises", { method: "DELETE", body: JSON.stringify({ post_id: Number(id) }) });
+      if (hasLiked) {
+        const res = await unlikePost(Number(id));
         if (res.code === 200) {
-          setHasPraised(false);
-          setPraiseCount((c) => Math.max(0, c - 1));
+          setHasLiked(false);
+          setLikeCount((c) => Math.max(0, c - 1));
           markPostDirty(Number(id));
-          window.dispatchEvent(new CustomEvent("post-stats-changed", { detail: { postId: Number(id), praiseCount: praiseCount - 1, hasPraised: false } }));
+          window.dispatchEvent(new CustomEvent("post-stats-changed", { detail: { postId: Number(id), likeCount: likeCount - 1 } }));
         }
       } else {
-        const res = await apiFetch("/Praises", { method: "POST", body: JSON.stringify({ post_id: Number(id) }) });
+        const res = await likePost(Number(id));
         if (res.code === 200) {
-          setHasPraised(true);
-          setPraiseCount((c) => c + 1);
+          setHasLiked(true);
+          setLikeCount((c) => c + 1);
           markPostDirty(Number(id));
-          window.dispatchEvent(new CustomEvent("post-stats-changed", { detail: { postId: Number(id), praiseCount: praiseCount + 1, hasPraised: true } }));
+          window.dispatchEvent(new CustomEvent("post-stats-changed", { detail: { postId: Number(id), likeCount: likeCount + 1 } }));
         }
       }
     } catch { addToast("Network error.", { type: "error", title: "Error" }); }
-    finally { setPraising(false); }
+    finally { setLiking(false); }
+  };
+
+  const handleFavorite = async () => {
+    if (!currentUser) { addToast("Please log in to favorite.", { type: "warning", title: "Not logged in" }); return; }
+    setFavoriting(true);
+    try {
+      if (hasFavorited) {
+        const res = await unfavoritePost(Number(id));
+        if (res.code === 200) {
+          setHasFavorited(false);
+          markPostDirty(Number(id));
+          window.dispatchEvent(new CustomEvent("post-stats-changed", { detail: { postId: Number(id), hasFavorited: false } }));
+        }
+      } else {
+        const res = await favoritePost(Number(id));
+        if (res.code === 200) {
+          setHasFavorited(true);
+          markPostDirty(Number(id));
+          window.dispatchEvent(new CustomEvent("post-stats-changed", { detail: { postId: Number(id), hasFavorited: true } }));
+        }
+      }
+    } catch { addToast("Network error.", { type: "error", title: "Error" }); }
+    finally { setFavoriting(false); }
   };
 
   const isAuthor = currentUser && post && currentUser.id === post.user_id;
-
-  const handleCollect = async () => {
-    if (!currentUser) { addToast("Please log in to collect.", { type: "warning", title: "Not logged in" }); return; }
-    setCollecting(true);
-    try {
-      if (hasCollected) {
-        const res = await apiFetch("/Collections", { method: "DELETE", body: JSON.stringify({ post_id: Number(id) }) });
-        if (res.code === 200) {
-          setHasCollected(false);
-          setCollectionCount((c) => Math.max(0, c - 1));
-          markPostDirty(Number(id));
-          window.dispatchEvent(new CustomEvent("post-stats-changed", { detail: { postId: Number(id), collectionCount: collectionCount - 1, hasCollected: false } }));
-        }
-      } else {
-        const res = await apiFetch("/Collections", { method: "POST", body: JSON.stringify({ post_id: Number(id) }) });
-        if (res.code === 200) {
-          setHasCollected(true);
-          setCollectionCount((c) => c + 1);
-          markPostDirty(Number(id));
-          window.dispatchEvent(new CustomEvent("post-stats-changed", { detail: { postId: Number(id), collectionCount: collectionCount + 1, hasCollected: true } }));
-        }
-      }
-    } catch { addToast("Network error.", { type: "error", title: "Error" }); }
-    finally { setCollecting(false); }
-  };
 
   return (
     <main className="mx-auto max-w-3xl p-6">
@@ -192,25 +163,25 @@ export default function PostDetailPage({ params }: Props) {
           </span>
           <button
             type="button"
-            onClick={handlePraise}
-            disabled={praising}
+            onClick={handleLike}
+            disabled={liking}
             className={`rounded border px-4 py-2 text-sm inline-flex items-center gap-1 disabled:opacity-50 ${
-              hasPraised ? "border-red-300 text-red-600 bg-red-50" : "border-gray-300 text-gray-700 hover:bg-gray-50"
+              hasLiked ? "border-red-300 text-red-600 bg-red-50" : "border-gray-300 text-gray-700 hover:bg-gray-50"
             }`}
           >
-            <img src={hasPraised ? "/icon/praise_yes.svg" : "/icon/praise_no.svg"} alt="praise" style={{ width: 16, height: 16 }} />
-            {praiseCount}
+            <img src={hasLiked ? "/icon/praise_yes.svg" : "/icon/praise_no.svg"} alt="like" style={{ width: 16, height: 16 }} />
+            {likeCount}
           </button>
           <button
             type="button"
-            onClick={handleCollect}
-            disabled={collecting}
+            onClick={handleFavorite}
+            disabled={favoriting}
             className={`rounded border px-4 py-2 text-sm inline-flex items-center gap-1 disabled:opacity-50 ${
-              hasCollected ? "border-yellow-300 text-yellow-600 bg-yellow-50" : "border-gray-300 text-gray-700 hover:bg-gray-50"
+              hasFavorited ? "border-yellow-300 text-yellow-600 bg-yellow-50" : "border-gray-300 text-gray-700 hover:bg-gray-50"
             }`}
           >
-            <img src={hasCollected ? "/icon/collect_yes.svg" : "/icon/collect_no.svg"} alt="collect" style={{ width: 16, height: 16 }} />
-            {hasCollected ? "Collected" : "Collect"}
+            <img src={hasFavorited ? "/icon/collect_yes.svg" : "/icon/collect_no.svg"} alt="favorite" style={{ width: 16, height: 16 }} />
+            {hasFavorited ? "Favorited" : "Favorite"}
           </button>
           {isAuthor && (
             <button
@@ -264,7 +235,7 @@ export default function PostDetailPage({ params }: Props) {
 
       {post && (
         <div className="mt-8 pt-6 border-t border-gray-200">
-          <CommentSection postId={id} initialComments={initialComments} initialCommentCount={commentCount} />
+          <CommentSection postId={id} initialComments={initialComments} />
         </div>
       )}
     </main>

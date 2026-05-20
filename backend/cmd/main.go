@@ -36,14 +36,7 @@ func main() {
 		AllowCredentials: true,
 	}))
 
-	router.UserRoutes(r)
-	router.FollowRoutes(r)
-	router.FeedRoutes(r)
-	router.PostRoutes(r)
-	router.CommentRoutes(r)
-	router.PraiseRoutes(r)
-	router.CollectionRoutes(r)
-	router.InteractionStatusRoutes(r)
+	router.RegisterRoutes(r)
 
 	r.Run(":18080")
 }

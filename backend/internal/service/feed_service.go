@@ -9,24 +9,23 @@ import (
 
 // GetRecommendPosts returns the recommended feed.
 // Recommend posts take more than half of total, the rest is 2/3 recent + 1/3 following.
-func GetRecommendPosts(requestType string, excludeIDs []int, userID int) ([]model.Posts, error) {
+func GetRecommendPosts(requestType string, excludeIDs []int, userID int) ([]model.FeedItem, error) {
 	count := feedCount(requestType)
 
 	// Part A: Recommend 1/2 of total, excluding already seen posts. This is the core of the "recommend" feed.
 	recentCount := count / 3
 	followingCount := count * 1 / 6
 
-	recentIDs, _ := repository.GetRecentPostIDs(recentCount, excludeIDs, userID)
+	recentIDs, _ := repository.GetRecentPostIDs(recentCount, excludeIDs, userID, false)
 	followingIDs, _ := repository.GetFollowingPostIDs(followingCount, excludeIDs, userID, true)
 
 	// Part B: Fill the rest with more recommend posts, excluding all already seen IDs from A. This ensures we always return "count" posts if available.
 	recCount := count - len(recentIDs) - len(followingIDs)
 	recExcludeIDs := append(excludeIDs, recentIDs...)
 	recExcludeIDs = append(recExcludeIDs, followingIDs...)
-	recommendIDs, _ := repository.GetRecommendPostIDs(recCount, recExcludeIDs, userID)
+	recommendIDs, _ := repository.GetRecommendPostIDs(recCount, recExcludeIDs, userID, false)
 
-	// Build result: recommend first, then randomly interleave recent+following
-	// Use a seen set to prevent duplicates across the three sources
+	// Build result: recommend first, then recent+following (shuffled together)
 	seen := make(map[int]bool, count)
 	result := make([]int, 0, count)
 
@@ -36,16 +35,26 @@ func GetRecommendPosts(requestType string, excludeIDs []int, userID int) ([]mode
 			result = append(result, id)
 		}
 	}
-	for _, id := range recentIDs {
+	// Shuffle recent and following together for variety
+	shuffled := make([]int, 0, len(recentIDs)+len(followingIDs))
+	shuffled = append(shuffled, recentIDs...)
+	shuffled = append(shuffled, followingIDs...)
+	for _, id := range shuffled {
 		if !seen[id] {
 			seen[id] = true
 			result = append(result, id)
 		}
 	}
-	for _, id := range followingIDs {
-		if !seen[id] {
-			seen[id] = true
-			result = append(result, id)
+	var degradedIDs []int
+	// Degrade: if we didn't get enough posts, fill remaining slots without state filter
+	if len(result) < count {
+		remaining := count - len(result)
+		degradedIDs, _ = repository.GetRecommendPostIDs(remaining, result, userID, true)
+		for _, id := range degradedIDs {
+			if !seen[id] {
+				seen[id] = true
+				result = append(result, id)
+			}
 		}
 	}
 
@@ -53,13 +62,13 @@ func GetRecommendPosts(requestType string, excludeIDs []int, userID int) ([]mode
 	if err != nil {
 		return nil, err
 	}
-	log.Printf("[GetRecommendPosts][recommendIDs=%v recentIDs=%v followingIDs=%v] posts=%d count=%d",
-		recommendIDs, recentIDs, followingIDs, len(posts), count)
+	log.Printf("[GetRecommendPosts][recommendIDs=%v recentIDs=%v followingIDs=%v degradedIDs=%v result=%v] posts=%d count=%d",
+		recommendIDs, recentIDs, followingIDs, degradedIDs, result, len(posts), count)
 	return posts, nil
 }
 
 // GetFollowingPosts returns the following feed.
-func GetFollowingPosts(requestType string, excludeIDs []int, userID int) ([]model.Posts, error) {
+func GetFollowingPosts(requestType string, excludeIDs []int, userID int) ([]model.FeedItem, error) {
 	count := feedCount(requestType)
 	ids, err := repository.GetFollowingPostIDs(count, excludeIDs, userID, false)
 	if err != nil {
@@ -74,7 +83,7 @@ func GetFollowingPosts(requestType string, excludeIDs []int, userID int) ([]mode
 }
 
 // GetHistoryPosts returns the user's browsing history as feed posts.
-func GetHistoryPosts(userID, page, pageSize int) ([]model.Posts, int, error) {
+func GetHistoryPosts(userID, page, pageSize int) ([]model.FeedItem, int, error) {
 	ids, total, err := repository.GetHistoryPostIDs(userID, page, pageSize)
 	if err != nil {
 		return nil, 0, err
@@ -86,9 +95,9 @@ func GetHistoryPosts(userID, page, pageSize int) ([]model.Posts, int, error) {
 	return posts, total, nil
 }
 
-// GetCollectionPosts returns the user's collected posts as feed posts.
-func GetCollectionPosts(userID, page, pageSize int) ([]model.Posts, int, error) {
-	ids, total, err := repository.GetCollectionPostIDs(userID, page, pageSize)
+// GetFavoriteFeed returns the user's favorited posts as feed posts.
+func GetFavoriteFeed(userID, page, pageSize int) ([]model.FeedItem, int, error) {
+	ids, total, err := repository.GetFavoritePostIDs(userID, page, pageSize)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -100,8 +109,30 @@ func GetCollectionPosts(userID, page, pageSize int) ([]model.Posts, int, error) 
 }
 
 // GetAuthorPosts returns posts authored by the given user with pagination.
-func GetAuthorPosts(userID, page, pageSize int) ([]model.Posts, int, error) {
+func GetAuthorPosts(userID, page, pageSize int) ([]model.FeedItem, int, error) {
 	return repository.GetPostsByUserID(userID, page, pageSize)
+}
+
+// GetAuthorPage returns author profile and paginated authored posts in one response.
+func GetAuthorPage(userID, currentUserID, page, pageSize int) (model.User, []model.FeedItem, int, error) {
+	user, err := repository.GetUserByID(userID)
+	if err != nil {
+		return model.User{}, nil, 0, err
+	}
+	if currentUserID > 0 && currentUserID != userID {
+		following, _ := repository.IsFollowExist(model.Follow{
+			FollowerID:  currentUserID,
+			FollowingID: userID,
+		})
+		user.IsFollowing = following
+	}
+
+	posts, total, err := repository.GetPostsByUserID(userID, page, pageSize)
+	if err != nil {
+		return model.User{}, nil, 0, err
+	}
+
+	return user, posts, total, nil
 }
 
 func feedCount(requestType string) int {

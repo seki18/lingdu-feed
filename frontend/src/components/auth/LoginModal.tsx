@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { apiFetch, ApiResponse } from "@/lib/api";
+import { login, register as registerApi } from "@/lib/api";
 import { saveAuth } from "@/lib/auth";
 import { useToast } from "@/components/ui/ToastContext";
 import { User } from "@/types/user";
@@ -84,16 +84,9 @@ export default function LoginModal({
 
     setLoading(true);
     try {
-      const response: ApiResponse = await apiFetch("/auth/" + mode, {
-        method: "POST",
-        body: JSON.stringify({
-          email,
-          password,
-          ...(mode === "register" && {
-            username,
-          }),
-        }),
-      });
+      const response = await (mode === "login"
+        ? login(email, password)
+        : registerApi(email, password, username));
 
       if (response.code !== 200) {
         const errorMsg = response.message;

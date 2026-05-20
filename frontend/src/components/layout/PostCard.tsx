@@ -2,7 +2,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { PostSummary } from "@/types/post";
-import { trackInteractionStatus } from "@/lib/api";
+import { trackState } from "@/lib/api";
 
 interface Props {
   post: PostSummary;
@@ -18,23 +18,14 @@ export default function PostCard({ post }: Props) {
 
   // Track resource display (status=2) when component mounts
   useEffect(() => {
-    trackInteractionStatus(post.id, 2);
+    trackState(post.id, 2);
   }, [post.id]);
 
-  // Track resource click (status=3) — pass all data to detail page
+  // Track resource click (status=3) — navigate directly (no URL caching)
   const handleClick = (e: React.MouseEvent) => {
     e.preventDefault();
-    trackInteractionStatus(post.id, 3);
-    const params = new URLSearchParams();
-    params.set("t", post.title);
-    params.set("u", post.username || "");
-    params.set("uid", String(post.user_id));
-    params.set("ct", post.created_time);
-    params.set("pc", String(post.praise_count ?? 0));
-    params.set("cc", String(post.comment_count ?? 0));
-    params.set("clc", String(post.collection_count ?? 0));
-    params.set("vc", String(post.view_count ?? 0));
-    router.push(`/posts/${post.id}?${params.toString()}`);
+    trackState(post.id, 3);
+    router.push(`/posts/${post.id}`);
   };
 
   const handleUserClick = (e: React.MouseEvent) => {
@@ -56,13 +47,13 @@ export default function PostCard({ post }: Props) {
           <Icon name="see" /> {post.view_count ?? 0}
         </span>
         <span className="inline-flex items-center gap-1">
-          <Icon name="praise_no" /> {post.praise_count ?? 0}
+          <Icon name="praise_no" /> {post.like_count ?? 0}
         </span>
         <span className="inline-flex items-center gap-1">
           <Icon name="comment" /> {post.comment_count ?? 0}
         </span>
         <span className="inline-flex items-center gap-1">
-          <Icon name="collect_no" /> {post.collection_count ?? 0}
+          <Icon name="collect_no" /> {post.favorite_count ?? 0}
         </span>
       </div>
       <p className="mt-1 text-sm text-gray-400">{new Date(post.created_time).toLocaleString()}</p>

@@ -1,10 +1,9 @@
 import { getToken } from "./auth";
+import { PostSummary } from "@/types/post";
 
 const BASE_URL = "http://localhost:18080";
 
 // ── Dirty post tracker (module-level, survives component remounts) ──
-// Detail page sets dirtyPostId when user interacts (like/collect/comment).
-// Feed page reads & clears it after restoring from cache.
 let dirtyPostIds = new Set<number>();
 export function markPostDirty(postId: number): void {
   dirtyPostIds.add(postId);
@@ -23,7 +22,6 @@ export interface ApiResponse<T = any> {
 }
 
 // apiFetch sends an authenticated request to the backend API and returns the parsed response.
-// Pass skipAuth: true in options to omit the Authorization header.
 export async function apiFetch<T = any>(
   path: string,
   options: RequestInit & { skipAuth?: boolean } = {}
@@ -55,9 +53,9 @@ export async function apiFetch<T = any>(
   }
 }
 
-// ── Interaction status (with client-side cache to avoid redundant requests) ──
+// ── State tracking (delivered=1, exposed=2, clicked=3) ──
 
-const statusCache = new Map<number, number>(); // postId → highest status already sent
+const statusCache = new Map<number, number>();
 let pendingBatch: { post_id: number; status: 1 | 2 | 3 }[] = [];
 let batchTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -65,16 +63,13 @@ function flushBatch() {
   if (pendingBatch.length === 0) return;
   const batch = pendingBatch;
   pendingBatch = [];
-  apiFetch("/interaction-status/batch", {
+  apiFetch("/api/state/batch", {
     method: "POST",
     body: JSON.stringify(batch),
-  }).catch((err) => console.warn("Batch status update failed:", err));
+  }).catch((err) => console.warn("Batch state update failed:", err));
 }
 
-// trackInteractionStatus tracks user interactions with posts (delivery=1, display=2, click=3).
-// Skips if the new status is not higher than what was already recorded locally,
-// EXCEPT for status=3 (click) which is always sent to update updated_time for history ordering.
-export function trackInteractionStatus(postId: number, status: 1 | 2 | 3): void {
+export function trackState(postId: number, status: 1 | 2 | 3): void {
   const prev = statusCache.get(postId) ?? 0;
   if (status < prev) return;
   if (status === prev && status !== 3) return;
@@ -89,55 +84,61 @@ export function trackInteractionStatus(postId: number, status: 1 | 2 | 3): void 
   }
 }
 
-// batchTrackDelivery immediately reports a list of post IDs as delivered (status=1).
-export function batchTrackDelivery(postIds: number[]): void {
-  for (const id of postIds) {
-    const prev = statusCache.get(id) ?? 0;
-    if (1 <= prev) continue;
-    statusCache.set(id, 1);
-  }
-  const batch = postIds
-    .filter((id) => !statusCache.has(id) || statusCache.get(id)! === 1)
-    .map((id) => ({ post_id: id, status: 1 as const }));
-  if (batch.length === 0) return;
-  apiFetch("/interaction-status/batch", {
-    method: "POST",
-    body: JSON.stringify(batch),
-  }).catch((err) => console.warn("Batch delivery update failed:", err));
+// ── Social API helpers ──
+
+export async function likePost(postId: number): Promise<ApiResponse> {
+  return apiFetch(`/api/posts/${postId}/like`, { method: "POST" });
 }
 
-// ── Post stats (bundled exist + counts for detail page) ──
+export async function unlikePost(postId: number): Promise<ApiResponse> {
+  return apiFetch(`/api/posts/${postId}/like`, { method: "DELETE" });
+}
 
-// updateUsername sends a PUT /users request to change the current user's username (auth required).
+export async function favoritePost(postId: number): Promise<ApiResponse> {
+  return apiFetch(`/api/posts/${postId}/favorite`, { method: "POST" });
+}
+
+export async function unfavoritePost(postId: number): Promise<ApiResponse> {
+  return apiFetch(`/api/posts/${postId}/favorite`, { method: "DELETE" });
+}
+
+export async function getComments(postId: number): Promise<ApiResponse> {
+  return apiFetch(`/api/posts/${postId}/comments`);
+}
+
+export async function createComment(postId: number, content: string, replyId?: number): Promise<ApiResponse> {
+  return apiFetch(`/api/posts/${postId}/comments`, {
+    method: "POST",
+    body: JSON.stringify({ content, reply_id: replyId ?? null }),
+  });
+}
+
+export async function deleteComment(commentId: number): Promise<ApiResponse> {
+  return apiFetch(`/api/comments/${commentId}`, { method: "DELETE" });
+}
+
+// ── User API helpers ──
+
 export async function updateUsername(username: string): Promise<ApiResponse> {
-  return apiFetch("/users", {
+  return apiFetch("/api/users/me/profile", {
     method: "PUT",
     body: JSON.stringify({ username }),
   });
 }
 
-// changePassword sends a PUT /users/password request to change the current user's password (auth required).
 export async function changePassword(oldPassword: string, newPassword: string): Promise<ApiResponse> {
-  return apiFetch("/users/password", {
+  return apiFetch("/api/users/me/password", {
     method: "PUT",
     body: JSON.stringify({ old_password: oldPassword, new_password: newPassword }),
   });
 }
 
-// followUser follows a user (auth required).
-export async function followUser(followingId: number): Promise<ApiResponse> {
-  return apiFetch("/Follows", {
-    method: "POST",
-    body: JSON.stringify({ following_id: followingId }),
-  });
+export async function followUser(userId: number): Promise<ApiResponse> {
+  return apiFetch(`/api/users/${userId}/follow`, { method: "POST" });
 }
 
-// unfollowUser unfollows a user (auth required).
-export async function unfollowUser(followingId: number): Promise<ApiResponse> {
-  return apiFetch("/Follows", {
-    method: "DELETE",
-    body: JSON.stringify({ following_id: followingId }),
-  });
+export async function unfollowUser(userId: number): Promise<ApiResponse> {
+  return apiFetch(`/api/users/${userId}/follow`, { method: "DELETE" });
 }
 
 export interface FollowItem {
@@ -147,20 +148,98 @@ export interface FollowItem {
   created_time: string;
 }
 
-// getFollowingList returns the list of users that userId is following (paginated).
 export async function getFollowingList(
   userId: number,
   page = 1,
   pageSize = 10
 ): Promise<ApiResponse<{ follows: FollowItem[]; total: number }>> {
-  return apiFetch(`/Follows/list/following/${userId}?page=${page}&pageSize=${pageSize}`);
+  return apiFetch(`/api/users/${userId}/following?page=${page}&pageSize=${pageSize}`);
 }
 
-// getFollowerList returns the list of followers of userId (paginated).
 export async function getFollowerList(
   userId: number,
   page = 1,
   pageSize = 10
 ): Promise<ApiResponse<{ follows: FollowItem[]; total: number }>> {
-  return apiFetch(`/Follows/list/follower/${userId}?page=${page}&pageSize=${pageSize}`);
+  return apiFetch(`/api/users/${userId}/followers?page=${page}&pageSize=${pageSize}`);
+}
+
+// ── Feed page helpers ──
+
+export async function getRecommendFeed(
+  requestType: "initial" | "subsequent" = "subsequent",
+  currentIds?: string
+): Promise<ApiResponse<PostSummary[]>> {
+  const qs = [`request_type=${requestType}`];
+  if (currentIds) qs.push(`current_ids=${encodeURIComponent(currentIds)}`);
+  return apiFetch(`/api/feed/recommend?${qs.join("&")}`);
+}
+
+export async function getFollowingFeed(
+  requestType: "initial" | "subsequent" = "subsequent",
+  currentIds?: string
+): Promise<ApiResponse<PostSummary[]>> {
+  const qs = [`request_type=${requestType}`];
+  if (currentIds) qs.push(`current_ids=${encodeURIComponent(currentIds)}`);
+  return apiFetch(`/api/feed/following?${qs.join("&")}`);
+}
+
+export async function getHistoryFeed(
+  page = 1,
+  pageSize = 10
+): Promise<ApiResponse<{ items: PostSummary[]; total: number }>> {
+  return apiFetch(`/api/feed/history?page=${page}&page_size=${pageSize}`);
+}
+
+export async function getFavoriteFeed(
+  page = 1,
+  pageSize = 10
+): Promise<ApiResponse<{ items: PostSummary[]; total: number }>> {
+  return apiFetch(`/api/feed/favorites?page=${page}&page_size=${pageSize}`);
+}
+
+export async function getUserFeed(
+  userId: number,
+  page = 1,
+  pageSize = 10
+): Promise<ApiResponse<{ user: any; posts: PostSummary[]; total: number }>> {
+  return apiFetch(`/api/feed/users/${userId}?page=${page}&page_size=${pageSize}`);
+}
+
+export async function getPostDetail(id: number): Promise<ApiResponse<any>> {
+  return apiFetch(`/api/posts/${id}`);
+}
+
+export async function updatePost(id: number, title: string, content: string): Promise<ApiResponse> {
+  return apiFetch(`/api/posts/${id}`, {
+    method: "PUT",
+    body: JSON.stringify({ title, content }),
+  });
+}
+
+export async function deletePost(id: number): Promise<ApiResponse> {
+  return apiFetch(`/api/posts/${id}`, { method: "DELETE" });
+}
+
+export async function createPost(title: string, content: string): Promise<ApiResponse> {
+  return apiFetch("/api/posts", {
+    method: "POST",
+    body: JSON.stringify({ title, content }),
+  });
+}
+
+// ── Auth API helpers ──
+
+export async function login(email: string, password: string): Promise<ApiResponse> {
+  return apiFetch("/api/auth/login", {
+    method: "POST",
+    body: JSON.stringify({ email, password }),
+  });
+}
+
+export async function register(email: string, password: string, username: string): Promise<ApiResponse> {
+  return apiFetch("/api/auth/register", {
+    method: "POST",
+    body: JSON.stringify({ email, password, username }),
+  });
 }

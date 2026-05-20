@@ -15,7 +15,7 @@ func GetPostContentByID(id int) (model.Post, error) {
 
 	err := common.DB.Get(&post, `
 		SELECT p.id, p.user_id, u.username, p.title, p.content,
-			p.praise_count, p.comment_count, p.collection_count, p.view_count,
+			p.like_count, p.comment_count, p.favorite_count, p.view_count,
 			p.created_time, p.updated_time
 		FROM posts p
 		JOIN users u ON u.id = p.user_id
@@ -84,14 +84,14 @@ func DeletePostByID(id int64) error {
 
 // GetPostsByIDs returns post summary rows for the given IDs, preserving the
 // order of the supplied slice by re-sorting in Go after the SQL query.
-func GetPostsByIDs(ids []int) ([]model.Posts, error) {
+func GetPostsByIDs(ids []int) ([]model.FeedItem, error) {
 	if len(ids) == 0 {
-		return []model.Posts{}, nil
+		return []model.FeedItem{}, nil
 	}
 
 	query := `
 		SELECT p.id, p.user_id, u.username, p.title,
-			p.praise_count, p.comment_count, p.collection_count, p.view_count,
+			p.like_count, p.comment_count, p.favorite_count, p.view_count,
 			p.created_time
 		FROM posts as p
 		LEFT JOIN users as u ON p.user_id = u.id
@@ -103,7 +103,7 @@ func GetPostsByIDs(ids []int) ([]model.Posts, error) {
 	}
 	query = common.DB.Rebind(query)
 
-	var rows []model.Posts
+	var rows []model.FeedItem
 	if err := common.DB.Select(&rows, query, args...); err != nil {
 		return nil, err
 	}
@@ -117,7 +117,7 @@ func GetPostsByIDs(ids []int) ([]model.Posts, error) {
 			seen[id] = true
 		}
 	}
-	posts := make([]model.Posts, len(ids))
+	posts := make([]model.FeedItem, len(ids))
 	written := 0
 	for _, row := range rows {
 		if idx, ok := idIndex[row.ID]; ok {
@@ -130,14 +130,14 @@ func GetPostsByIDs(ids []int) ([]model.Posts, error) {
 
 // GetPostStatsByIDs returns lightweight stat records for the given post IDs,
 // preserving input order. Only fetches count columns (no content).
-func GetPostStatsByIDs(ids []int) ([]model.Posts, error) {
+func GetPostStatsByIDs(ids []int) ([]model.FeedItem, error) {
 	if len(ids) == 0 {
-		return []model.Posts{}, nil
+		return []model.FeedItem{}, nil
 	}
 
 	query := `
 		SELECT p.id, p.user_id, u.username, p.title,
-			p.praise_count, p.comment_count, p.collection_count, p.view_count,
+			p.like_count, p.comment_count, p.favorite_count, p.view_count,
 			p.created_time
 		FROM posts as p
 		LEFT JOIN users as u ON p.user_id = u.id
@@ -149,7 +149,7 @@ func GetPostStatsByIDs(ids []int) ([]model.Posts, error) {
 	}
 	query = common.DB.Rebind(query)
 
-	var rows []model.Posts
+	var rows []model.FeedItem
 	if err := common.DB.Select(&rows, query, args...); err != nil {
 		return nil, err
 	}
@@ -163,7 +163,7 @@ func GetPostStatsByIDs(ids []int) ([]model.Posts, error) {
 			seen[id] = true
 		}
 	}
-	posts := make([]model.Posts, len(ids))
+	posts := make([]model.FeedItem, len(ids))
 	written := 0
 	for _, row := range rows {
 		if idx, ok := idIndex[row.ID]; ok {
@@ -175,8 +175,8 @@ func GetPostStatsByIDs(ids []int) ([]model.Posts, error) {
 }
 
 // GetPostsByUserID returns posts authored by the given user, newest first, with pagination.
-func GetPostsByUserID(userID int, page, pageSize int) ([]model.Posts, int, error) {
-	var posts []model.Posts
+func GetPostsByUserID(userID int, page, pageSize int) ([]model.FeedItem, int, error) {
+	var posts []model.FeedItem
 	var total int
 
 	// Count total
@@ -187,7 +187,7 @@ func GetPostsByUserID(userID int, page, pageSize int) ([]model.Posts, int, error
 	offset := (page - 1) * pageSize
 	err := common.DB.Select(&posts, `
 		SELECT p.id, p.user_id, u.username, p.title,
-			p.praise_count, p.comment_count, p.collection_count, p.view_count,
+			p.like_count, p.comment_count, p.favorite_count, p.view_count,
 			p.created_time
 		FROM posts as p
 		LEFT JOIN users as u ON p.user_id = u.id
@@ -199,15 +199,15 @@ func GetPostsByUserID(userID int, page, pageSize int) ([]model.Posts, int, error
 	return posts, total, err
 }
 
-// IncrPraiseCount atomically increments the praise_count for a post.
-func IncrPraiseCount(postID int) error {
-	_, err := common.DB.Exec(`UPDATE posts SET praise_count = praise_count + 1 WHERE id = $1`, postID)
+// IncrLikeCount atomically increments the like_count for a post.
+func IncrLikeCount(postID int) error {
+	_, err := common.DB.Exec(`UPDATE posts SET like_count = like_count + 1 WHERE id = $1`, postID)
 	return err
 }
 
-// DecrPraiseCount atomically decrements the praise_count for a post (floor 0).
-func DecrPraiseCount(postID int) error {
-	_, err := common.DB.Exec(`UPDATE posts SET praise_count = GREATEST(praise_count - 1, 0) WHERE id = $1`, postID)
+// DecrLikeCount atomically decrements the like_count for a post (floor 0).
+func DecrLikeCount(postID int) error {
+	_, err := common.DB.Exec(`UPDATE posts SET like_count = GREATEST(like_count - 1, 0) WHERE id = $1`, postID)
 	return err
 }
 
@@ -223,15 +223,15 @@ func DecrCommentCount(postID int) error {
 	return err
 }
 
-// IncrCollectionCount atomically increments the collection_count for a post.
-func IncrCollectionCount(postID int) error {
-	_, err := common.DB.Exec(`UPDATE posts SET collection_count = collection_count + 1 WHERE id = $1`, postID)
+// IncrFavoriteCount atomically increments the favorite_count for a post.
+func IncrFavoriteCount(postID int) error {
+	_, err := common.DB.Exec(`UPDATE posts SET favorite_count = favorite_count + 1 WHERE id = $1`, postID)
 	return err
 }
 
-// DecrCollectionCount atomically decrements the collection_count for a post (floor 0).
-func DecrCollectionCount(postID int) error {
-	_, err := common.DB.Exec(`UPDATE posts SET collection_count = GREATEST(collection_count - 1, 0) WHERE id = $1`, postID)
+// DecrFavoriteCount atomically decrements the favorite_count for a post (floor 0).
+func DecrFavoriteCount(postID int) error {
+	_, err := common.DB.Exec(`UPDATE posts SET favorite_count = GREATEST(favorite_count - 1, 0) WHERE id = $1`, postID)
 	return err
 }
 

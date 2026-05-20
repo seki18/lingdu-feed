@@ -6,6 +6,7 @@ import (
 	"strconv"
 
 	"github.com/seki18/lingdu-feed/internal/common"
+	"github.com/seki18/lingdu-feed/internal/model"
 	"github.com/seki18/lingdu-feed/internal/service"
 	"github.com/seki18/lingdu-feed/internal/utils"
 
@@ -55,12 +56,12 @@ func GetHistoryPosts(c *gin.Context) {
 	common.SuccessPaginated(c, posts, total, page, pageSize)
 }
 
-// GetCollectionPosts handles GET /feed/collections.
-func GetCollectionPosts(c *gin.Context) {
+// GetFavoriteFeed handles GET /feed/favorites.
+func GetFavoriteFeed(c *gin.Context) {
 	uid := utils.GetAuthUserID(c)
 	page, pageSize := utils.ParsePagination(c)
-	log.Printf("[GetCollectionPosts] user_id=%d page=%d page_size=%d", uid, page, pageSize)
-	posts, total, err := service.GetCollectionPosts(uid, page, pageSize)
+	log.Printf("[GetFavoriteFeed] user_id=%d page=%d page_size=%d", uid, page, pageSize)
+	posts, total, err := service.GetFavoriteFeed(uid, page, pageSize)
 	if err != nil {
 		common.Error(c, http.StatusBadRequest, common.ErrInvalidParam.WithErr(err))
 		return
@@ -68,19 +69,35 @@ func GetCollectionPosts(c *gin.Context) {
 	common.SuccessPaginated(c, posts, total, page, pageSize)
 }
 
-// GetAuthorPosts handles GET /feed/author/:user_id. Returns posts by a specific user.
+// GetAuthorPosts handles GET /feed/author/:user_id. Returns author profile and authored posts in one response.
 func GetAuthorPosts(c *gin.Context) {
-	userID, err := strconv.Atoi(c.Param("user_id"))
+	userID, err := strconv.Atoi(c.Param("id"))
 	if err != nil || userID <= 0 {
 		common.Error(c, http.StatusBadRequest, common.ErrInvalidParam)
 		return
 	}
 	page, pageSize := utils.ParsePagination(c)
-	log.Printf("[GetAuthorPosts] user_id=%d page=%d page_size=%d", userID, page, pageSize)
-	posts, total, err := service.GetAuthorPosts(userID, page, pageSize)
+	currentUserID := utils.GetSoftUserID(c)
+	log.Printf("[GetAuthorPosts] user_id=%d current_user_id=%d page=%d page_size=%d", userID, currentUserID, page, pageSize)
+	user, posts, total, err := service.GetAuthorPage(userID, currentUserID, page, pageSize)
 	if err != nil {
 		common.Error(c, http.StatusBadRequest, common.ErrInvalidParam.WithErr(err))
 		return
 	}
-	common.SuccessPaginated(c, posts, total, page, pageSize)
+
+	type authorPageResponse struct {
+		User     model.User       `json:"user"`
+		Posts    []model.FeedItem `json:"posts"`
+		Total    int              `json:"total"`
+		Page     int              `json:"page"`
+		PageSize int              `json:"page_size"`
+	}
+
+	common.Success(c, authorPageResponse{
+		User:     user,
+		Posts:    posts,
+		Total:    total,
+		Page:     page,
+		PageSize: pageSize,
+	})
 }

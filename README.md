@@ -1,238 +1,231 @@
 # Lingdu Feed
 
-A community feed platform with content discovery, social interactions, and a personalized recommendation algorithm. Built with **Go (Gin)** + **Next.js (React 19)** and **PostgreSQL**.
+A community content feed platform with **Go (Gin)** + **Next.js 16 (React 19)** + **PostgreSQL**.
+
+Publish posts, browse a hybrid recommendation feed, like/favorite/comment, follow users, and track reading history. The feed blends trending, recent, and social signals with a delivery pipeline (`delivered → exposed → clicked`) to deduplicate seen content.
 
 ---
 
 ## Features
 
-- **User System** — Registration, login (JWT), profile management, follow / unfollow
-- **Content Feed** — Hybrid recommendation algorithm blending trending, recent, and social signals
-- **Smart Interaction Tracking** — Feeds deduplicate seen content via fine-grained status states (delivered → displayed → clicked)
-- **Posts & Comments** — Create, update, delete posts with nested reply-style comments
-- **Engagement** — Likes (praises), collections (bookmarks), and view counts
-- **Dual Auth** — Hard auth (required) + soft auth (optional, for guest browsing with degraded personalization)
-- **History & Collections** — Personal reading history and saved posts
-
----
-
-## Project Architecture
-
-```
-lingdu-feed/
-├── backend/                    # Go API server (Gin + sqlx + PostgreSQL)
-│   ├── cmd/main.go             # Entry point, route registration, CORS
-│   ├── config/config.go        # Env-based configuration
-│   ├── internal/
-│   │   ├── common/             # Shared: DB pool, error codes, response envelope, pagination
-│   │   ├── handler/            # HTTP handlers (thin, delegates to services)
-│   │   ├── middleware/         # AuthMiddleware (JWT required) & SoftAuthMiddleware (optional)
-│   │   ├── model/              # DB models & request/response DTOs
-│   │   ├── repository/         # Data access layer (raw SQL via sqlx)
-│   │   ├── router/             # Route grouping & middleware binding
-│   │   ├── service/            # Business logic layer
-│   │   └── utils/              # JWT helpers, Gin bind utilities
-│   ├── migrations/             # SQL migration files
-│   ├── go.mod
-│   └── go.sum
-├── frontend/                   # Next.js 16 + React 19 + TypeScript + Tailwind CSS 4
-│   ├── src/
-│   │   ├── app/                # App Router pages: feed, posts/[id], users/[id], etc.
-│   │   ├── components/
-│   │   │   ├── auth/           # LoginModal
-│   │   │   ├── comment/        # CommentSection
-│   │   │   ├── layout/         # Header, PostBlock, PostCard
-│   │   │   └── ui/             # Loading, Toast (context-based notification)
-│   │   ├── lib/                # apiFetch wrapper, auth token helpers
-│   │   └── types/              # TypeScript interfaces for posts, comments, users
-│   └── package.json
-├── docker-compose.yml          # PostgreSQL 16 container
-└── README.md
-```
-
----
-
-## Design Decisions
-
-### Layered Backend (Handler → Service → Repository)
-
-Each domain entity follows a strict three-layer separation:
-
-| Layer | Responsibility | Rules |
-|-------|---------------|-------|
-| **Handler** | Parse request, call service, send response | No business logic |
-| **Service** | Business logic, orchestration, feed algorithm | No direct SQL |
-| **Repository** | Raw SQL queries via `sqlx` | No business logic |
-
-This keeps the codebase testable and each layer replaceable independently.
-
-### Feed Recommendation Algorithm
-
-The `/feed/recommend` endpoint composes posts from three distinct sources and applies a weighted scoring model for the "recommend" portion.
-
-#### Post Scoring (Recommend Pool)
-
-The recommend pool uses a weighted scoring formula computed directly in SQL:
-
-```
-score = recency × 0.1 + views × 3 + praises × 5 + collections × 4 + comments × 4
-```
-
-Weights reflect engagement value — a *praise* (like) is the strongest signal (×5), while *views* contribute modestly (×3) to avoid inflating clickbait. Recency (Unix epoch × 0.1) ensures trending posts naturally decay over time.
-
-#### Composition Strategy
-
-| Source | Proportion | Behavior |
-|--------|-----------|----------|
-| **Recommend** | ≥50% (`count/2 + 1`) | Top-N by weighted score, no interaction filter |
-| **Recent** | ~33% of remainder | Latest posts, excluding already-seen/dismissed |
-| **Following** | ~17% of remainder | Posts from followed users, excluding already-seen/dismissed |
-
-1. Fetch the recommend slice first (guaranteed majority)
-2. Fill the remaining slots with 2/3 recent + 1/3 following
-3. Shuffle the recent+following pool randomly, then append after the recommend block
-
-This ensures the top of every feed is high-engagement content, while the tail provides a randomized mix of freshness and social relevance.
-
-#### Deduplication & Staleness
-
-All three sources accept an `excludeIDs` list (IDs the client has already seen). Additionally, the recent and following sources filter via `interaction_status`: posts where `status > FeedDisplay` (i.e., clicked/dismissed beyond display) are excluded. The recommend pool intentionally skips this filter to allow popular posts to resurface.
-
-#### Feed Size
-
-Controlled by `requestType`:
-
-| Request Type | Posts Returned |
-|-------------|---------------|
-| `initial` / `refresh` | 6 |
-| `subsequent` / `next` / `more` | 10 |
-
-This allows the client to request smaller batches for first-load vs. scroll-based pagination.
-
-### Soft Auth vs Hard Auth
-
-Instead of requiring login for every endpoint, endpoints use one of two middlewares:
-
-- **`AuthMiddleware`** — Rejects with `401` if no valid JWT (used for create/update/delete, personal feeds)
-- **`SoftAuthMiddleware`** — Sets `user_id = -1` if unauthenticated, allowing guest access with best-effort personalization (used for public feeds, user profiles)
-
-### Interaction Status Tracking
-
-Every feed delivery records a status in `interaction_status`:
-- `Unknown (0)` → `Delivered (1)` → `Displayed (2)` → `Clicked (3)`
-
-This powers feed deduplication (never show the same post twice in a session) and enables future recommendation tuning based on engagement signals.
-
-### Standardized API Envelope
-
-All endpoints return:
-
-```json
-{
-  "code": 0,
-  "message": "success",
-  "data": { ... }
-}
-```
-
-Error codes follow a structured hierarchy (`400xx` client errors, `401xx` auth, `500xx` server errors). The original Go error is logged server-side but never leaked to the client.
-
-### Counter Caching (Write-Through)
-
-Like/praise, comment, collection, and follow counts are maintained as denormalized columns on the parent table. Every insert/delete on the child table triggers an atomic `UPDATE SET count = count ± 1` on the parent, so feeds never need expensive `COUNT(*)` joins.
+| Area | Capabilities |
+|---|---|
+| **Auth** | Register, login, JWT (hard auth + optional soft auth) |
+| **Posts** | CRUD with title + content, owner-only edit/delete |
+| **Comments** | Nested replies, cascade delete |
+| **Social** | Like/unlike, favorite/unfavorite, follow/unfollow |
+| **Feeds** | Recommend (hybrid), following, user-authored, history, favorites |
+| **Tracking** | Per-user delivery state pipeline with automatic degradation fallback |
+| **API** | Unified JSON envelope `{ code, message, data }` with pagination |
 
 ---
 
 ## Tech Stack
 
-| Layer | Technology |
-|-------|-----------|
-| Backend framework | [Gin](https://github.com/gin-gonic/gin) |
-| Database driver | [sqlx](https://github.com/jmoiron/sqlx) + [lib/pq](https://github.com/lib/pq) |
-| Auth | [golang-jwt/jwt/v5](https://github.com/golang-jwt/jwt) + bcrypt |
-| Frontend framework | [Next.js 16](https://nextjs.org/) (App Router) |
-| UI | [React 19](https://react.dev/) + [Tailwind CSS 4](https://tailwindcss.com/) |
-| Language | TypeScript (strict) |
-| Database | PostgreSQL 16 (via Docker Compose) |
+| Layer | Stack |
+|---|---|
+| Backend | Go 1.26 + Gin v1.12 + sqlx v1.4 + PostgreSQL 16 |
+| Frontend | Next.js 16 + React 19 + TypeScript 5 + Tailwind CSS 4 |
+| Auth | golang-jwt v5 + bcrypt |
+| Infra | Docker Compose (PostgreSQL 16, Redis 7) |
 
 ---
 
-## Getting Started
-
-### Prerequisites
-
-- Go 1.26+
-- Node.js 20+
-- Docker & Docker Compose
-
-### 1. Start PostgreSQL
+## Quick Start
 
 ```bash
-docker-compose up -d
-```
+# 1. Start PostgreSQL
+docker compose up -d postgres
 
-### 2. Run database migrations
+# 2. Run migration
+docker compose exec -T postgres psql -U admin -d community < backend/migrations/001_init.sql
 
-Apply the SQL files in `backend/migrations/` to your PostgreSQL instance.
-
-### 3. Configure environment
-
-Create a `.env` file in `backend/`:
-
-```env
-DB_HOST=localhost
-DB_PORT=5432
+# 3. Configure .env (in backend/)
+echo "DB_HOST=localhost
+DB_PORT=15432
 DB_USER=admin
 DB_PASSWORD=password
-DB_NAME=community
-```
+DB_NAME=community" > backend/.env
 
-### 4. Start the backend
+# 4. Start backend (:18080)
+cd backend && go run cmd/main.go
 
-```bash
-cd backend
-go mod tidy
-go run cmd/main.go
-# Server runs on http://localhost:18080
-```
-
-### 5. Start the frontend
-
-```bash
-cd frontend
-npm install
-npm run dev
-# App runs on http://localhost:3000
+# 5. Start frontend (:3000)
+cd frontend && npm install && npm run dev
 ```
 
 ---
 
-## API Overview
+## Project Structure
 
-| Method | Path | Auth | Description |
-|--------|------|------|-------------|
-| `POST` | `/auth/register` | None | Create account |
-| `POST` | `/auth/login` | None | Login, returns JWT |
-| `GET` | `/users/me` | Required | Current user profile |
-| `GET` | `/users/:id` | Soft | View any user profile |
-| `PUT` | `/users` | Required | Update username |
-| `GET` | `/feed/recommend` | Soft | Hybrid recommendation feed |
-| `GET` | `/feed/following` | Required | Posts from followed users |
-| `GET` | `/feed/author/:user_id` | None | Posts by a specific user |
-| `GET` | `/feed/history` | Required | User's reading history |
-| `GET` | `/feed/collections` | Required | User's saved posts |
-| `POST` | `/post` | Required | Create a post |
-| `PUT` | `/post` | Required | Update a post |
-| `DELETE` | `/post` | Required | Delete a post |
-| `POST` | `/comments` | Required | Add a comment |
-| `DELETE` | `/comments` | Required | Delete a comment |
-| `POST` | `/praises` | Required | Like a post |
-| `DELETE` | `/praises` | Required | Unlike a post |
-| `POST` | `/collections` | Required | Bookmark a post |
-| `DELETE` | `/collections` | Required | Remove bookmark |
-| `POST` | `/follows` | Required | Follow a user |
-| `DELETE` | `/follows` | Required | Unfollow a user |
-| `POST` | `/interaction-statuses` | Required | Record feed interaction |
+```
+lingdu-feed/
+├── docker-compose.yml
+├── backend/
+│   ├── cmd/main.go
+│   ├── config/config.go
+│   ├── migrations/001_init.sql
+│   └── internal/
+│       ├── common/        # DB pool, errors, response helpers
+│       ├── handler/       # HTTP handlers → feed, post, social, follow, state, user
+│       ├── middleware/    # AuthMiddleware, SoftAuthMiddleware
+│       ├── model/         # DB models + request/response DTOs
+│       ├── repository/    # Raw SQL (sqlx), one file per table
+│       ├── router/        # Route groups & middleware binding
+│       ├── service/       # Business logic orchestration
+│       └── utils/         # JWT, Gin helpers
+├── frontend/
+│   └── src/
+│       ├── app/           # App Router (feed, posts/[id], users/[id], history, collections)
+│       ├── components/    # auth, comment, layout, ui
+│       ├── lib/           # api.ts (typed fetch), auth.ts
+│       └── types/         # Post, Comment, User interfaces
+```
+
+---
+
+## Architecture
+
+### Backend: Handler → Service → Repository
+
+```
+Router → Middleware (Auth/SoftAuth) → Handler (parse/bind/respond)
+                                       → Service (business logic)
+                                         → Repository (raw SQL via sqlx)
+                                           → Model (structs with db/json tags)
+```
+
+### Database Schema
+
+```
+users ──1:N── posts ──1:N── comments (self-ref reply_id)
+  │              │
+  │              ├── N:M likes (user_id, post_id)
+  │              ├── N:M favorites (user_id, post_id)
+  │              └── N:M states (user_id, post_id, status 0-3)
+  │
+  └── N:M follows (follower_id, following_id)
+```
+
+---
+
+## API Reference
+
+All routes use `/api` prefix.
+
+### Auth
+
+| Method | Path | Auth |
+|---|---|---|
+| `POST` | `/api/auth/register` | Public |
+| `POST` | `/api/auth/login` | Public |
+
+### User
+
+| Method | Path | Auth |
+|---|---|---|
+| `GET` | `/api/users/:id` | SoftAuth |
+| `PUT` | `/api/users/me/profile` | Auth |
+| `PUT` | `/api/users/me/password` | Auth |
+
+### Feed
+
+| Method | Path | Auth |
+|---|---|---|
+| `GET` | `/api/feed/recommend` | SoftAuth |
+| `GET` | `/api/feed/following` | Auth |
+| `GET` | `/api/feed/users/:id` | SoftAuth |
+| `GET` | `/api/feed/history` | Auth |
+| `GET` | `/api/feed/favorites` | Auth |
+
+Params: `request_type` (`initial`/`subsequent`), `current_ids`, `page`, `page_size`
+
+### Post
+
+| Method | Path | Auth |
+|---|---|---|
+| `GET` | `/api/posts/:id` | SoftAuth |
+| `POST` | `/api/posts` | Auth |
+| `PUT` | `/api/posts/:id` | Auth |
+| `DELETE` | `/api/posts/:id` | Auth |
+
+### Social
+
+| Method | Path | Auth |
+|---|---|---|
+| `POST` | `/api/posts/:id/like` | Auth |
+| `DELETE` | `/api/posts/:id/like` | Auth |
+| `POST` | `/api/posts/:id/favorite` | Auth |
+| `DELETE` | `/api/posts/:id/favorite` | Auth |
+| `GET` | `/api/posts/:id/comments` | SoftAuth |
+| `POST` | `/api/posts/:id/comments` | Auth |
+| `DELETE` | `/api/comments/:id` | Auth |
+
+### Follow
+
+| Method | Path | Auth |
+|---|---|---|
+| `POST` | `/api/users/:id/follow` | Auth |
+| `DELETE` | `/api/users/:id/follow` | Auth |
+| `GET` | `/api/users/:id/following` | Public |
+| `GET` | `/api/users/:id/followers` | Public |
+
+### State
+
+| Method | Path | Auth |
+|---|---|---|
+| `POST` | `/api/state/batch` | Auth |
+
+### Response Envelope
+
+```json
+{ "code": 200, "message": "success", "data": { ... } }
+```
+
+Paginated: `{ "items": [...], "total": 42, "page": 1, "page_size": 20 }`
+
+### Error Codes
+
+| Code | Meaning |
+|---|---|
+| 0 | Success |
+| 40001 | Invalid parameter |
+| 40002 | Password incorrect |
+| 40003 | User not found |
+| 40004 | Post not found |
+| 40100 | Unauthorized |
+| 40901 | Email already registered |
+| 50000 | Internal server error |
+
+---
+
+## Feed Algorithm
+
+### Scoring
+
+```
+score = recency × 0.1 + views × 3 + likes × 5 + favorites × 4 + comments × 4
+```
+
+### Composition
+
+| Source | Share | Filter |
+|---|---|---|
+| Recommend | ≥50% | Top-N by score, no state filter |
+| Recent | ~33% | Latest posts, state-filtered |
+| Following | ~17% | From followed users, state-filtered |
+
+### Degradation
+
+If normal requests return insufficient posts, the system auto-degrades: refetches from the recommend pool *without* the state filter, allowing previously-seen posts to fill remaining slots. The `excludeIDs` list is always preserved to avoid duplicates on the current page.
+
+### State Pipeline
+
+```
+Delivered (1) → Exposed (2) → Clicked (3)
+```
+
+Reported in batch (500ms debounce). View count increments on first click only.
 
 ---
 
@@ -242,8 +235,26 @@ npm run dev
 
 - [ ] **Image Upload** — Support post images (single/multiple) with file upload API and frontend preview
 - [ ] **Search** — Full-text search across posts, users, and comments
+- [ ] **User Audit Log** — Record user login/logout, page dwell time, and key actions for analytics
+- [ ] **Observability** — Structured logging, request tracing, error alerting, and incident investigation toolchain
 
 ### Optimizations
 
 - [ ] **Caching Layer** — Introduce Redis for hot feed data and session caching to reduce DB load
 - [ ] **Cloud Migration** — Migrate static assets to cloud object storage (S3/OSS) and deploy services to a cloud platform
+
+---
+
+## Development
+
+```bash
+# Backend
+cd backend && go run cmd/main.go     # :18080
+
+# Frontend
+cd frontend && npm run dev           # :3000
+
+# Database shell
+docker compose exec postgres psql -U admin -d community
+```
+

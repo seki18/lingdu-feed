@@ -41,15 +41,11 @@ export default function CommentSection({ postId, initialComments, initialComment
     if (!force && initialLoaded.current) return;
     setLoading(true);
     try {
-      const [commentRes, countRes] = await Promise.all([
-        apiFetch(`/comments/by-post/${postId}`),
-        apiFetch(`/comments/count/${postId}`),
-      ]);
-      if (commentRes.code === 200) {
-        setComments(commentRes.data ?? []);
-      }
-      if (countRes.code === 200) {
-        setCommentCount(countRes.data?.count ?? 0);
+      const res = await apiFetch(`/api/posts/${postId}/comments`);
+      if (res.code === 200) {
+        const data = res.data ?? [];
+        setComments(data);
+        setCommentCount(data.length);
       }
     } catch (err) {
       console.error(err);
@@ -69,7 +65,7 @@ export default function CommentSection({ postId, initialComments, initialComment
     }
     setSubmitting(true);
     try {
-      const res = await apiFetch("/comments", {
+      const res = await apiFetch(`/api/posts/${postId}/comments`, {
         method: "POST",
         body: JSON.stringify({ post_id: Number(postId), content: content.trim() }),
       });
@@ -92,7 +88,7 @@ export default function CommentSection({ postId, initialComments, initialComment
     if (!replyContent.trim() || replyTo === null) return;
     setSubmitting(true);
     try {
-      const res = await apiFetch("/comments", {
+      const res = await apiFetch(`/api/posts/${postId}/comments`, {
         method: "POST",
         body: JSON.stringify({
           post_id: Number(postId),
@@ -119,7 +115,7 @@ export default function CommentSection({ postId, initialComments, initialComment
   const handleDelete = async (commentId: number) => {
     if (!confirm("Delete this comment? Its replies will also be removed.")) return;
     try {
-      const res = await apiFetch(`/comments/${commentId}`, { method: "DELETE" });
+      const res = await apiFetch(`/api/comments/${commentId}`, { method: "DELETE" });
       if (res.code === 200) {
         addToast("Comment deleted.", { type: "success", title: "Deleted" });
         markPostDirty(Number(postId));

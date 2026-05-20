@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import PostCard from "@/components/layout/PostCard";
-import { apiFetch, batchTrackDelivery, consumeDirtyPostIds } from "@/lib/api";
+import { apiFetch, trackState, consumeDirtyPostIds } from "@/lib/api";
 import { getUser } from "@/lib/auth";
 import { useToast } from "@/components/ui/ToastContext";
 import Loading from "@/components/ui/Loading";
@@ -78,7 +78,7 @@ export default function HomePage() {
       const fetchedIds = rawPosts.map(p => p.id);
       deliveredIdsRef.current = Array.from(new Set([...deliveredIdsRef.current, ...fetchedIds]));
       setDeliveredIds(deliveredIdsRef.current);
-      batchTrackDelivery(rawPosts.map(p => p.id));
+      fetchedIds.forEach(id => trackState(id, 1));
       return newCount;
     } catch (error) {
       addToast("Unable to load posts.", { type: "error", title: "Error" });
@@ -96,8 +96,9 @@ export default function HomePage() {
     setPosts([]);
     setDeliveredIds([]);
     setHasMore(true);
-    skipObserver.current = true;
-    const endpoint = t === "recommend" ? "/feed/recommend" : "/feed/following";
+    hasMoreRef.current = true;
+    setObserverPaused(true);
+    const endpoint = t === "recommend" ? "/api/feed/recommend" : "/api/feed/following";
     await fetchFeed(endpoint, "initial", false);
     // Fill page, waiting for React render between each batch
     for (let tries = 0; tries < 5; tries++) {
@@ -106,17 +107,10 @@ export default function HomePage() {
       const fetched = await fetchFeed(endpoint, "subsequent", true);
       if (fetched === 0) break;
     }
-    // Re-enable observer after user scrolls (not just a timer)
-    const onFirstScroll = () => {
-      skipObserver.current = false;
-      window.removeEventListener("scroll", onFirstScroll, { capture: true });
-    };
-    window.addEventListener("scroll", onFirstScroll, { capture: true });
-    // Fallback: re-enable after 2s if user never scrolls
+    // Enable observer after a short delay to let React commit
     setTimeout(() => {
-      skipObserver.current = false;
-      window.removeEventListener("scroll", onFirstScroll, { capture: true });
-    }, 2000);
+      setObserverPaused(false);
+    }, 100);
     // Write to module-level cache
     feedCache = {
       tab: t,
@@ -136,43 +130,24 @@ export default function HomePage() {
 
       // Restore from module-level cache if fresh enough
       if (feedCache && Date.now() - feedCache.timestamp < CACHE_TTL) {
-        skipObserver.current = true;
+        setObserverPaused(true);
         setTab(feedCache.tab);
         postsRef.current = feedCache.posts;
         setPosts(feedCache.posts);
         deliveredIdsRef.current = feedCache.deliveredIds;
         setDeliveredIds(feedCache.deliveredIds);
         setHasMore(feedCache.hasMore);
-        batchTrackDelivery(feedCache.posts.map(p => p.id));
-        // Re-enable observer after user scrolls
-        const onFirstScroll = () => {
-          skipObserver.current = false;
-          window.removeEventListener("scroll", onFirstScroll, { capture: true });
-        };
-        window.addEventListener("scroll", onFirstScroll, { capture: true });
+        feedCache.posts.forEach(p => trackState(p.id, 1));
+        // Enable observer after React commits
         setTimeout(() => {
-          skipObserver.current = false;
-          window.removeEventListener("scroll", onFirstScroll, { capture: true });
-        }, 2000);
+          setObserverPaused(false);
+        }, 100);
 
-        // Fetch updated stats for posts that were interacted with on the detail page
+        // If posts were interacted with on the detail page, just invalidate cache;
+        // do NOT auto-refresh — user can manually click Refresh to get fresh data
         const ids = consumeDirtyPostIds();
         if (ids.length > 0) {
-          apiFetch("/posts/batch-stats", {
-            method: "POST",
-            body: JSON.stringify({ post_ids: ids }),
-          }).then(res => {
-            if (res.code === 200 && res.data) {
-              const freshPosts: PostSummary[] = res.data;
-              const freshMap = new Map(freshPosts.map(p => [p.id, p]));
-              postsRef.current = postsRef.current.map(p => {
-                const fresh = freshMap.get(p.id);
-                return fresh ? { ...p, praise_count: fresh.praise_count, comment_count: fresh.comment_count, collection_count: fresh.collection_count, view_count: fresh.view_count } : p;
-              });
-              setPosts(postsRef.current);
-              if (feedCache) { feedCache.posts = postsRef.current; feedCache.timestamp = Date.now(); }
-            }
-          }).catch(err => console.warn("Batch stats fetch failed:", err));
+          feedCache = null;
         }
         return;
       }
@@ -184,10 +159,10 @@ export default function HomePage() {
     void init();
     const onAuthChanged = () => setUser(getUser());
     const onPostStatsChanged = (e: Event) => {
-      const { postId, praiseCount, hasPraised, collectionCount, hasCollected, commentCount: cc } = (e as CustomEvent).detail;
+      const { postId, likeCount, collectionCount: cc, commentCount: cmt } = (e as CustomEvent).detail;
       postsRef.current = postsRef.current.map(p =>
         p.id === postId
-          ? { ...p, praise_count: praiseCount ?? p.praise_count, collection_count: collectionCount ?? p.collection_count, comment_count: cc ?? p.comment_count }
+          ? { ...p, like_count: likeCount ?? p.like_count, favorite_count: cc ?? p.favorite_count, comment_count: cmt ?? p.comment_count }
           : p
       );
       setPosts(postsRef.current);
@@ -235,7 +210,7 @@ export default function HomePage() {
     }
     setCreating(true);
     try {
-      const response = await apiFetch("/post", {
+      const response = await apiFetch("/api/posts", {
         method: "POST",
         body: JSON.stringify({ title: title.trim(), content: content.trim() }),
       });
@@ -247,7 +222,7 @@ export default function HomePage() {
       setPosts((current) => [{
         id: newPost.id, user_id: newPost.user_id, username: user.username,
         title: newPost.title, created_time: newPost.created_time,
-        praise_count: 0, comment_count: 0, collection_count: 0, view_count: 0,
+        like_count: 0, comment_count: 0, favorite_count: 0, view_count: 0,
       }, ...current]);
       setTitle(""); setContent("");
       setShowCreateModal(false);
@@ -264,20 +239,20 @@ export default function HomePage() {
   const lastItemRef = useRef<HTMLDivElement | null>(null);
   const hasMoreRef = useRef(true);
   const loadingRef = useRef(false);
-  const skipObserver = useRef(false); // prevent observer from firing on cache restore
+  const [observerPaused, setObserverPaused] = useState(false); // true during initial load / cache restore
 
   useEffect(() => { hasMoreRef.current = hasMore; }, [hasMore]);
   useEffect(() => { loadingRef.current = loading || loadingMore; }, [loading, loadingMore]);
 
   useEffect(() => {
-    if (skipObserver.current) return;
+    if (observerPaused) return;
     if (observerRef.current) observerRef.current.disconnect();
     observerRef.current = new IntersectionObserver((entries) => {
-      if (skipObserver.current) return;
+      if (observerPaused) return;
       for (const entry of entries) {
         if (!entry.isIntersecting) continue;
         if (!loadingRef.current && hasMoreRef.current) {
-          const endpoint = tab === "recommend" ? "/feed/recommend" : "/feed/following";
+          const endpoint = tab === "recommend" ? "/api/feed/recommend" : "/api/feed/following";
           void fetchFeed(endpoint, "subsequent", true);
         }
       }
@@ -285,7 +260,7 @@ export default function HomePage() {
     const el = lastItemRef.current;
     if (el) observerRef.current.observe(el);
     return () => observerRef.current?.disconnect();
-  }, [posts, tab]);
+  }, [posts, tab, observerPaused]);
 
   return (
     <main className="mx-auto flex max-w-4xl flex-col gap-6 p-6">

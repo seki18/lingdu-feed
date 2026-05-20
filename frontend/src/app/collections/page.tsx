@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import PostCard from "@/components/layout/PostCard";
-import { apiFetch } from "@/lib/api";
+import { getFavoriteFeed } from "@/lib/api";
 import { useToast } from "@/components/ui/ToastContext";
 import { PostSummary } from "@/types/post";
 
@@ -18,7 +18,7 @@ export default function CollectionsPage() {
     const fetchData = async (p: number) => {
       setLoading(true);
       try {
-        const res = await apiFetch(`/feed/collections?page=${p}&page_size=${pageSize}`);
+        const res = await getFavoriteFeed(p, pageSize);
         if (res.code === 200) {
           setItems(res.data?.items ?? []);
           setTotal(res.data?.total ?? 0);

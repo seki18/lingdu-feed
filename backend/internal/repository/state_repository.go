@@ -7,22 +7,22 @@ import (
 	"github.com/jmoiron/sqlx"
 )
 
-// GetInteractionStatus retrieves a single interaction_status row.
-func GetInteractionStatus(interactionStatus model.InteractionStatus) (model.InteractionStatus, error) {
-	var s model.InteractionStatus
+// GetState retrieves a single states row.
+func GetState(state model.State) (model.State, error) {
+	var s model.State
 	err := common.DB.Get(&s, `
 		SELECT post_id, user_id, status, updated_time
-		FROM interaction_status
+		FROM states
 		WHERE post_id = $1 AND user_id = $2
-	`, interactionStatus.PostID, interactionStatus.UserID)
+	`, state.PostID, state.UserID)
 	return s, err
 }
 
-// UpsertInteractionStatus inserts a new Status if it doesn't exist, or updates it if it does.
-func UpsertInteractionStatus(interactionStatus model.InteractionStatus) error {
+// UpsertState inserts a new State if it doesn't exist, or updates it if it does.
+func UpsertState(state model.State) error {
 
 	_, err := common.DB.Exec(`
-		INSERT INTO interaction_status (
+		INSERT INTO states (
 			user_id,
 			post_id,
 			status,
@@ -37,21 +37,21 @@ func UpsertInteractionStatus(interactionStatus model.InteractionStatus) error {
 		ON CONFLICT (user_id, post_id)
 		DO UPDATE SET
 			status = GREATEST(
-				interaction_status.status,
+				states.status,
 				EXCLUDED.status
 			),
 			updated_time = NOW()
 	`,
-		interactionStatus.UserID,
-		interactionStatus.PostID,
-		interactionStatus.Status,
+		state.UserID,
+		state.PostID,
+		state.Status,
 	)
 
 	return err
 }
 
 // GetViewCounts returns a map of post_id → view count for the given post IDs.
-// Views are counted from interaction_status rows where status = 3 (FeedClick).
+// Views are counted from states rows where status = 3 (StateClicked).
 func GetViewCounts(postIDs []int) (map[int]int, error) {
 	if len(postIDs) == 0 {
 		return map[int]int{}, nil
@@ -63,10 +63,10 @@ func GetViewCounts(postIDs []int) (map[int]int, error) {
 	var rows []row
 	query, args, err := sqlx.In(`
 		SELECT post_id, COUNT(*) AS cnt
-		FROM interaction_status
+		FROM states
 		WHERE post_id IN (?) AND status = ?
 		GROUP BY post_id
-	`, postIDs, model.FeedClick)
+	`, postIDs, model.StateClicked)
 	if err != nil {
 		return nil, err
 	}
@@ -86,8 +86,8 @@ func GetViewCountByPostID(postID int) (int, error) {
 	var count int
 	err := common.DB.Get(&count, `
 		SELECT COUNT(1)
-		FROM interaction_status
+		FROM states
 		WHERE post_id = $1 AND status = $2
-	`, postID, model.FeedClick)
+	`, postID, model.StateClicked)
 	return count, err
 }

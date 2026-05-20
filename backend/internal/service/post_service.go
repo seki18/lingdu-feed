@@ -37,7 +37,7 @@ func UpdatePost(req model.UpdatePostRequest) (model.Post, error) {
 }
 
 // GetPostsByUserID returns all posts authored by the given user, with pagination.
-func GetPostsByUserID(userID int, page, pageSize int) ([]model.Posts, int, error) {
+func GetPostsByUserID(userID int, page, pageSize int) ([]model.FeedItem, int, error) {
 	return repository.GetPostsByUserID(userID, page, pageSize)
 }
 
@@ -48,11 +48,11 @@ func DeletePostByID(id int64) error {
 
 // GetPostDetail returns the full detail for a post, including interaction
 // status and comments, all fetched concurrently.
-func GetPostDetail(id, userID int) (*model.PostDetail, error) {
+func GetPostDetail(id, userID int) (*model.PostDetailResponse, error) {
 	var (
 		post      model.Post
-		praised   bool
-		collected bool
+		liked     bool
+		favorited bool
 		comments  []model.Comment
 	)
 	errCh := make(chan error, 4)
@@ -64,12 +64,12 @@ func GetPostDetail(id, userID int) (*model.PostDetail, error) {
 	}()
 	go func() {
 		var e error
-		praised, e = repository.CheckPraised(userID, id)
+		liked, e = repository.CheckLiked(userID, id)
 		errCh <- e
 	}()
 	go func() {
 		var e error
-		collected, e = repository.CheckCollected(userID, id)
+		favorited, e = repository.CheckFavorited(userID, id)
 		errCh <- e
 	}()
 	go func() {
@@ -84,10 +84,10 @@ func GetPostDetail(id, userID int) (*model.PostDetail, error) {
 		}
 	}
 
-	return &model.PostDetail{
+	return &model.PostDetailResponse{
 		Post:         post,
-		HasPraised:   praised,
-		HasCollected: collected,
+		HasLiked:     liked,
+		HasFavorited: favorited,
 		Comments:     comments,
 	}, nil
 }

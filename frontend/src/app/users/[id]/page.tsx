@@ -1,11 +1,11 @@
 'use client';
 
 import { useEffect, useState, use } from "react";
-import { apiFetch, trackInteractionStatus, followUser, unfollowUser } from "@/lib/api";
+import { getUserFeed, getPostDetail, updatePost, deletePost, trackState, followUser, unfollowUser } from "@/lib/api";
 import { getUser } from "@/lib/auth";
 import { useToast } from "@/components/ui/ToastContext";
 import { PostSummary } from "@/types/post";
-import { User } from "@/types/user";
+import { User, UserProfilePage } from "@/types/user";
 import Link from "next/link";
 import ProfileModal from "@/components/auth/ProfileModal";
 
@@ -38,22 +38,14 @@ export default function UserPage({ params }: Props) {
   const fetchUserAndPosts = async (p = 1) => {
     setLoading(true);
     try {
-      const [userRes, postsRes] = await Promise.all([
-        apiFetch(`/users/${id}`),
-        apiFetch(`/feed/author/${id}?page=${p}&page_size=${pageSize}`),
-      ]);
-      if (userRes.code === 200) setUser(userRes.data);
-      if (postsRes.code === 200) {
-        setPosts(postsRes.data?.items ?? []);
-        setTotal(postsRes.data?.total ?? 0);
-      }
-
-      // follow status from user object
-      if (userRes.code === 200) {
-        const u = userRes.data;
-        setFollowing(u?.is_following ?? false);
-        setFollowingCount(u?.following_count ?? 0);
-        setFollowerCount(u?.follower_count ?? 0);
+      const userRes = await getUserFeed(Number(id), p, pageSize);
+      if (userRes.code === 200 && userRes.data) {
+        setUser(userRes.data.user);
+        setPosts(userRes.data.posts ?? []);
+        setTotal(userRes.data.total ?? 0);
+        setFollowing(userRes.data.user?.is_following ?? false);
+        setFollowingCount(userRes.data.user?.following_count ?? 0);
+        setFollowerCount(userRes.data.user?.follower_count ?? 0);
       }
     } catch (err) {
       console.error(err);
@@ -74,7 +66,7 @@ export default function UserPage({ params }: Props) {
     setEditContent("");
     // Fetch full post detail to get the content for editing
     try {
-      const res = await apiFetch(`/posts/${post.id}`);
+      const res = await getPostDetail(post.id);
       if (res.code === 200 && res.data?.content) {
         setEditContent(res.data.content);
       }
@@ -96,10 +88,8 @@ export default function UserPage({ params }: Props) {
     }
     setSaving(true);
     try {
-      const res = await apiFetch("/post", {
-        method: "PUT",
-        body: JSON.stringify({ id: editPostId, title: editTitle.trim(), content: editContent.trim() }),
-      });
+      if (editPostId == null) return;
+      const res = await updatePost(editPostId, editTitle.trim(), editContent.trim());
       if (res.code === 200) {
         addToast("Post updated successfully!", { type: "success", title: "Success" });
         handleCancelEdit();
@@ -118,7 +108,7 @@ export default function UserPage({ params }: Props) {
     if (!confirm("Are you sure you want to delete this post?")) return;
     setDeleting(postId);
     try {
-      const res = await apiFetch(`/posts/${postId}`, { method: "DELETE" });
+      const res = await deletePost(postId);
       if (res.code === 200) {
         addToast("Post deleted.", { type: "success", title: "Deleted" });
         await fetchUserAndPosts();
@@ -270,9 +260,9 @@ export default function UserPage({ params }: Props) {
                   <>
                     <div className="flex items-center justify-between gap-2">
                       <Link
-                        href={`/posts/${post.id}?t=${encodeURIComponent(post.title)}&u=${encodeURIComponent(post.username || "")}&uid=${post.user_id}&ct=${post.created_time}&pc=${post.praise_count ?? 0}&cc=${post.comment_count ?? 0}&clc=${post.collection_count ?? 0}&vc=${post.view_count ?? 0}`}
+                        href={`/posts/${post.id}`}
                         className="text-lg font-bold hover:underline"
-                        onClick={() => { trackInteractionStatus(post.id, 3); }}
+                        onClick={() => { trackState(post.id, 3); }}
                       >
                         {post.title}
                       </Link>
@@ -281,13 +271,13 @@ export default function UserPage({ params }: Props) {
                           <img src="/icon/see.svg" alt="" style={{ width: 14, height: 14 }} /> {post.view_count ?? 0}
                         </span>
                         <span className="inline-flex items-center gap-1">
-                          <img src="/icon/praise_no.svg" alt="" style={{ width: 14, height: 14 }} /> {post.praise_count ?? 0}
+                          <img src="/icon/praise_no.svg" alt="" style={{ width: 14, height: 14 }} /> {post.like_count ?? 0}
                         </span>
                         <span className="inline-flex items-center gap-1">
                           <img src="/icon/comment.svg" alt="" style={{ width: 14, height: 14 }} /> {post.comment_count ?? 0}
                         </span>
                         <span className="inline-flex items-center gap-1">
-                          <img src="/icon/collect_no.svg" alt="" style={{ width: 14, height: 14 }} /> {post.collection_count ?? 0}
+                          <img src="/icon/collect_no.svg" alt="" style={{ width: 14, height: 14 }} /> {post.favorite_count ?? 0}
                         </span>
                         {isOwner && (
                           <div className="flex gap-1 ml-2">

@@ -94,13 +94,7 @@ func Login(c *gin.Context) {
 	})
 }
 
-// Me handles GET /users/me (auth required). Returns the current user's ID.
-func Me(c *gin.Context) {
-	userID, _ := c.Get("user_id")
-	common.Success(c, userID)
-}
-
-// UpdateUser handles PUT /users (auth required). Updates the current user's username.
+// UpdateUsername handles PUT /users/me/profile (auth required). Updates the current user's username.
 func UpdateUsername(c *gin.Context) {
 	var req model.UpdateUserRequest
 
