@@ -22,7 +22,7 @@ func CalculateAndUpdateScores(fullUpdate bool) {
 	//
 	// tanh(x) = (e^2x - 1) / (e^2x + 1), smooth saturation to [0, 1)
 	query := `
-		UPDATE posts SET score = (
+		UPDATE posts SET score = ROUND((
 			0.15 * EXP(-EXTRACT(EPOCH FROM (NOW() - created_time)) / 604800.0) +
 			0.35 * (
 				(EXP(2.0 * view_count / 200.0) - 1) /
@@ -41,7 +41,7 @@ func CalculateAndUpdateScores(fullUpdate bool) {
 				(EXP(2.0 * favorite_count / 30.0) - 1) /
 				(EXP(2.0 * favorite_count / 30.0) + 1)
 			)
-		)
+		)::numeric, 6)::double precision
 	`
 	if !fullUpdate {
 		query += ` WHERE updated_time >= NOW() - INTERVAL '24 hours'`
