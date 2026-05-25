@@ -4,7 +4,6 @@ import (
 	"log"
 	"net/http"
 	"strconv"
-	"time"
 
 	"github.com/seki18/lingdu-feed/internal/common"
 	"github.com/seki18/lingdu-feed/internal/model"
@@ -15,43 +14,32 @@ import (
 )
 
 // GetRecommendPosts handles GET /feed/recommend. Returns recommended posts
-// with cursor-based pagination (recommend_score, recommend_id, recent_time, following_time).
+// with cursor-based pagination (single cursor ID).
 func GetRecommendPosts(c *gin.Context) {
 	uid := utils.GetSoftUserID(c)
-	var cursors service.FeedCursors
-	if rs := c.Query("recommend_score"); rs != "" {
-		cursors.RecommendScore, _ = strconv.ParseFloat(rs, 64)
-	}
-	if ri := c.Query("recommend_id"); ri != "" {
-		cursors.RecommendID, _ = strconv.Atoi(ri)
-	}
-	if rt := c.Query("recent_time"); rt != "" {
-		cursors.RecentTime, _ = time.Parse(time.RFC3339, rt)
-	}
-	if ft := c.Query("following_time"); ft != "" {
-		cursors.FollowingTime, _ = time.Parse(time.RFC3339, ft)
-	}
-	log.Printf("[GetRecommendPosts] user_id=%d cursors=%+v", uid, cursors)
-	posts, newCursors, err := service.GetRecommendPosts(uid, cursors)
+	requestType := c.DefaultQuery("request_type", "subsequent")
+	cursorID, _ := strconv.Atoi(c.DefaultQuery("cursor", "0"))
+	log.Printf("[GetRecommendPosts] requestType=%s user_id=%d cursor=%d", requestType, uid, cursorID)
+	posts, newCursor, err := service.GetRecommendPosts(uid, requestType, cursorID)
 	if err != nil {
 		common.Error(c, http.StatusBadRequest, common.ErrInvalidParam.WithErr(err))
 		return
 	}
-	common.Success(c, gin.H{"posts": posts, "cursors": newCursors})
+	common.Success(c, gin.H{"posts": posts, "cursor": newCursor})
 }
 
 // GetFollowingPosts handles GET /feed/following. Returns posts from
 // users that the current user follows, with cursor-based pagination.
 func GetFollowingPosts(c *gin.Context) {
 	uid := utils.GetAuthUserID(c)
-	cursor, _ := time.Parse(time.RFC3339, c.DefaultQuery("cursor", ""))
-	log.Printf("[GetFollowingPosts] user_id=%d cursor=%v", uid, cursor)
-	posts, newCursor, err := service.GetFollowingPosts(uid, cursor)
+	cursorID, _ := strconv.Atoi(c.DefaultQuery("cursor", "0"))
+	log.Printf("[GetFollowingPosts] user_id=%d cursor=%d", uid, cursorID)
+	posts, newCursor, err := service.GetFollowingPosts(uid, cursorID)
 	if err != nil {
 		common.Error(c, http.StatusBadRequest, common.ErrInvalidParam.WithErr(err))
 		return
 	}
-	common.Success(c, gin.H{"posts": posts, "cursor": newCursor.Format(time.RFC3339)})
+	common.Success(c, gin.H{"posts": posts, "cursor": newCursor})
 }
 
 // GetHistoryPosts handles GET /feed/history.

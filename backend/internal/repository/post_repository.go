@@ -2,6 +2,7 @@ package repository
 
 import (
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/seki18/lingdu-feed/internal/common"
@@ -93,7 +94,7 @@ func GetPostsByIDs(ids []int) ([]model.FeedItem, error) {
 	query := `
 		SELECT p.id, p.user_id, u.username, p.title,
 			p.like_count, p.comment_count, p.favorite_count, p.view_count,
-			p.created_time
+			p.score, p.created_time
 		FROM posts as p
 		LEFT JOIN users as u ON p.user_id = u.id
 		WHERE p.id IN (?)
@@ -110,23 +111,22 @@ func GetPostsByIDs(ids []int) ([]model.FeedItem, error) {
 	}
 
 	// Re-sort rows to match input ID order (deduplicated: only first occurrence gets the row)
-	idIndex := make(map[int]int, len(ids))
-	seen := make(map[int]bool, len(ids))
-	for i, id := range ids {
-		if !seen[id] {
-			idIndex[id] = i
-			seen[id] = true
-		}
-	}
-	posts := make([]model.FeedItem, len(ids))
-	written := 0
+	rowMap := make(map[int]model.FeedItem, len(rows))
 	for _, row := range rows {
-		if idx, ok := idIndex[row.ID]; ok {
-			posts[idx] = row
-			written++
+		rowMap[row.ID] = row
+	}
+	seen := make(map[int]bool, len(ids))
+	result := make([]model.FeedItem, 0, len(ids))
+	for _, id := range ids {
+		if seen[id] {
+			continue
+		}
+		seen[id] = true
+		if row, ok := rowMap[id]; ok {
+			result = append(result, row)
 		}
 	}
-	return posts[:written], nil
+	return result, nil
 }
 
 // GetPostStatsByIDs returns lightweight stat records for the given post IDs,
@@ -139,7 +139,7 @@ func GetPostStatsByIDs(ids []int) ([]model.FeedItem, error) {
 	query := `
 		SELECT p.id, p.user_id, u.username, p.title,
 			p.like_count, p.comment_count, p.favorite_count, p.view_count,
-			p.created_time
+			p.score, p.created_time
 		FROM posts as p
 		LEFT JOIN users as u ON p.user_id = u.id
 		WHERE p.id IN (?)
@@ -156,23 +156,22 @@ func GetPostStatsByIDs(ids []int) ([]model.FeedItem, error) {
 	}
 
 	// Re-sort rows to match input ID order (deduplicated: only first occurrence gets the row)
-	idIndex := make(map[int]int, len(ids))
-	seen := make(map[int]bool, len(ids))
-	for i, id := range ids {
-		if !seen[id] {
-			idIndex[id] = i
-			seen[id] = true
-		}
-	}
-	posts := make([]model.FeedItem, len(ids))
-	written := 0
+	rowMap := make(map[int]model.FeedItem, len(rows))
 	for _, row := range rows {
-		if idx, ok := idIndex[row.ID]; ok {
-			posts[idx] = row
-			written++
+		rowMap[row.ID] = row
+	}
+	seen := make(map[int]bool, len(ids))
+	result := make([]model.FeedItem, 0, len(ids))
+	for _, id := range ids {
+		if seen[id] {
+			continue
+		}
+		seen[id] = true
+		if row, ok := rowMap[id]; ok {
+			result = append(result, row)
 		}
 	}
-	return posts[:written], nil
+	return result, nil
 }
 
 // GetPostsByUserID returns posts authored by the given user, newest first, with pagination.
@@ -203,20 +202,34 @@ func GetPostsByUserID(userID int, page, pageSize int) ([]model.FeedItem, int, er
 // GetRecentPostIDs returns the most recent post IDs, newest first.
 // cursor is the created_time of the last item from the previous page; pass zero for the first page.
 func GetRecentPostIDs(count int, cursor time.Time) ([]int, error) {
-	query, args, err := sqlx.In(`
-		SELECT p.id
-		FROM posts as p
-		WHERE (? = '0001-01-01 00:00:00'::timestamp OR p.created_time < ?)
-		ORDER BY p.created_time DESC
-		LIMIT ?
-	`, cursor, cursor, count)
-	if err != nil {
-		return nil, err
+	query := `SELECT p.id FROM posts as p`
+	var args []interface{}
+
+	if !cursor.IsZero() {
+		query += ` WHERE p.created_time < $1`
+		args = append(args, cursor)
 	}
-	query = common.DB.Rebind(query)
+	query += fmt.Sprintf(` ORDER BY p.created_time DESC LIMIT $%d`, len(args)+1)
+	args = append(args, count)
 
 	var ids []int
-	if err := common.DB.Select(&ids, query, args...); err != nil {
+	if err := common.DB.Select(&ids, common.DB.Rebind(query), args...); err != nil {
+		return nil, err
+	}
+	return ids, nil
+}
+
+// GetRecentPostIDsCursor returns recent post IDs using id cursor.
+// cursorID is the id of the last item from the previous page; pass 0 for the first page.
+func GetRecentPostIDsCursor(count int, cursorID int) ([]int, error) {
+	query := `
+		SELECT p.id FROM posts p
+		WHERE ($1 = 0 OR p.id < $1)
+		ORDER BY p.created_time DESC
+		LIMIT $2
+	`
+	var ids []int
+	if err := common.DB.Select(&ids, query, cursorID, count); err != nil {
 		return nil, err
 	}
 	return ids, nil
@@ -229,37 +242,73 @@ func GetPostsByFollowingIDs(count int, followingIDs []int, cursor time.Time) ([]
 		return []int{}, nil
 	}
 
-	query, args, err := sqlx.In(`
-		SELECT p.id
-		FROM posts as p
-		WHERE p.user_id IN (?)
-		AND (? = '0001-01-01 00:00:00'::timestamp OR p.created_time < ?)
-		ORDER BY p.created_time DESC
-		LIMIT ?
-	`, followingIDs, cursor, cursor, count)
+	query := `SELECT p.id FROM posts as p`
+	var args []interface{}
+
+	// WHERE user_id IN (?)
+	q, idsArgs, err := sqlx.In(` WHERE p.user_id IN (?)`, followingIDs)
 	if err != nil {
 		return nil, err
 	}
-	query = common.DB.Rebind(query)
+	query += q
+	args = append(args, idsArgs...)
+
+	if !cursor.IsZero() {
+		query += fmt.Sprintf(` AND p.created_time < $%d`, len(args)+1)
+		args = append(args, cursor)
+	}
+	query += fmt.Sprintf(` ORDER BY p.created_time DESC LIMIT $%d`, len(args)+1)
+	args = append(args, count)
 
 	var ids []int
-	if err := common.DB.Select(&ids, query, args...); err != nil {
+	if err := common.DB.Select(&ids, common.DB.Rebind(query), args...); err != nil {
+		return nil, err
+	}
+	return ids, nil
+}
+
+// GetPostsByFollowingIDsCursor returns post IDs from following users using id cursor.
+func GetPostsByFollowingIDsCursor(count int, followingIDs []int, cursorID int) ([]int, error) {
+	if len(followingIDs) == 0 {
+		return []int{}, nil
+	}
+
+	query := `SELECT p.id FROM posts as p`
+	var args []interface{}
+
+	q, idsArgs, err := sqlx.In(` WHERE p.user_id IN (?)`, followingIDs)
+	if err != nil {
+		return nil, err
+	}
+	query += q
+	args = append(args, idsArgs...)
+
+	if cursorID != 0 {
+		query += fmt.Sprintf(` AND p.id < $%d`, len(args)+1)
+		args = append(args, cursorID)
+	}
+	query += fmt.Sprintf(` ORDER BY p.created_time DESC LIMIT $%d`, len(args)+1)
+	args = append(args, count)
+
+	var ids []int
+	if err := common.DB.Select(&ids, common.DB.Rebind(query), args...); err != nil {
 		return nil, err
 	}
 	return ids, nil
 }
 
 // GetRecommendPostIDs returns post IDs ranked by weighted score.
-// cursorScore/cursorID are the (score, id) of the last item from the previous page.
-func GetRecommendPostIDs(count int, cursorScore float64, cursorID int) ([]int, error) {
+// cursorID is the id of the last item from the previous page; pass 0 for the first page.
+// Only uses id as cursor (not score) to guarantee no duplicates/lost items when scores change.
+func GetRecommendPostIDs(count int, cursorID int) ([]int, error) {
 	query := `
 		SELECT p.id FROM posts p
-		WHERE (($1 = 0 AND $2 = 0) OR p.score < $1 OR (p.score = $1 AND p.id < $2))
+		WHERE ($1 = 0 OR p.id < $1)
 		ORDER BY p.score DESC, p.id DESC
-		LIMIT $3
+		LIMIT $2
 	`
 	var ids []int
-	if err := common.DB.Select(&ids, query, cursorScore, cursorID, count); err != nil {
+	if err := common.DB.Select(&ids, query, cursorID, count); err != nil {
 		return nil, err
 	}
 	return ids, nil

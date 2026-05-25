@@ -10,11 +10,11 @@ import { PostSummary } from "@/types/post";
 import { User } from "@/types/user";
 
 // ── Module-level feed cache (survives component remounts) ──
-const CACHE_TTL = 30000; // 30 seconds — long enough for back navigation, short enough to not serve stale data
+const CACHE_TTL = 30000;
 let feedCache: {
   tab: "recommend" | "following";
   posts: PostSummary[];
-  deliveredIds: number[];
+  cursor: number;
   hasMore: boolean;
   timestamp: number;
 } | null = null;
@@ -25,10 +25,7 @@ export default function HomePage() {
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
-  const [deliveredIds, setDeliveredIds] = useState<number[]>([]);
-  const deliveredIdsRef = useRef<number[]>([]);
   const postsRef = useRef<PostSummary[]>([]);
-  const initialLoaded = useRef(false);
   const tabLoaded = useRef(false); // track per-tab state
   const [creating, setCreating] = useState(false);
   const [title, setTitle] = useState("");
@@ -36,29 +33,40 @@ export default function HomePage() {
   const [user, setUser] = useState<User | null>(null);
   const { addToast } = useToast();
   const [showCreateModal, setShowCreateModal] = useState(false);
+  // Cursor for pagination
+  const cursorRef = useRef(0);
 
   // Generic fetch for both recommend and following feeds
   async function fetchFeed(
     endpoint: string,
-    requestType: "initial" | "subsequent" = "initial",
     append = false
   ): Promise<number> {
     if (append) setLoadingMore(true);
     else { setLoading(true); setHasMore(true); }
 
-    const currentIdsParam = append && deliveredIdsRef.current.length > 0
-      ? deliveredIdsRef.current.join(",")
-      : "";
+    // Build cursor query params
+    const params = new URLSearchParams();
+    params.set("request_type", append ? "subsequent" : "initial");
+    const c = cursorRef.current;
+    if (append && c > 0) params.set("cursor", String(c));
 
     try {
       const response = await apiFetch(
-        `${endpoint}?request_type=${requestType}${currentIdsParam ? `&current_ids=${encodeURIComponent(currentIdsParam)}` : ""}`
+        `${endpoint}?${params.toString()}`
       );
       if (response.code !== 200) {
         addToast(response.message || "Failed to load posts.", { type: "error", title: "Load failed" });
         return 0;
       }
-      const rawPosts: PostSummary[] = response.data ?? [];
+      // New cursor format: { posts: [...], cursors: {...} }
+      const rawPosts: PostSummary[] = response.data?.posts ?? [];
+      if (!Array.isArray(rawPosts)) {
+        console.error("Unexpected response format:", response.data);
+        return 0;
+      }
+      if (response.data?.cursor !== undefined) {
+        cursorRef.current = response.data.cursor;
+      }
       let newCount = 0;
       if (append) {
         const existingIds = new Set(postsRef.current.map(p => p.id));
@@ -76,8 +84,6 @@ export default function HomePage() {
         newCount = rawPosts.length;
       }
       const fetchedIds = rawPosts.map(p => p.id);
-      deliveredIdsRef.current = Array.from(new Set([...deliveredIdsRef.current, ...fetchedIds]));
-      setDeliveredIds(deliveredIdsRef.current);
       fetchedIds.forEach(id => trackState(id, 1));
       return newCount;
     } catch (error) {
@@ -91,20 +97,19 @@ export default function HomePage() {
 
   // Load current tab
   const loadTab = async (t: "recommend" | "following") => {
-    deliveredIdsRef.current = [];
+    cursorRef.current = 0;
     postsRef.current = [];
     setPosts([]);
-    setDeliveredIds([]);
     setHasMore(true);
     hasMoreRef.current = true;
     setObserverPaused(true);
     const endpoint = t === "recommend" ? "/api/feed/recommend" : "/api/feed/following";
-    await fetchFeed(endpoint, "initial", false);
+    await fetchFeed(endpoint);
     // Fill page, waiting for React render between each batch
     for (let tries = 0; tries < 5; tries++) {
       await new Promise<void>(r => requestAnimationFrame(() => r()));
       if (document.documentElement.scrollHeight > window.innerHeight) break;
-      const fetched = await fetchFeed(endpoint, "subsequent", true);
+      const fetched = await fetchFeed(endpoint, true);
       if (fetched === 0) break;
     }
     // Enable observer after a short delay to let React commit
@@ -115,7 +120,7 @@ export default function HomePage() {
     feedCache = {
       tab: t,
       posts: postsRef.current,
-      deliveredIds: deliveredIdsRef.current,
+      cursor: cursorRef.current,
       hasMore: hasMoreRef.current,
       timestamp: Date.now(),
     };
@@ -134,17 +139,15 @@ export default function HomePage() {
         setTab(feedCache.tab);
         postsRef.current = feedCache.posts;
         setPosts(feedCache.posts);
-        deliveredIdsRef.current = feedCache.deliveredIds;
-        setDeliveredIds(feedCache.deliveredIds);
         setHasMore(feedCache.hasMore);
+        cursorRef.current = feedCache.cursor;
         feedCache.posts.forEach(p => trackState(p.id, 1));
         // Enable observer after React commits
         setTimeout(() => {
           setObserverPaused(false);
         }, 100);
 
-        // If posts were interacted with on the detail page, just invalidate cache;
-        // do NOT auto-refresh — user can manually click Refresh to get fresh data
+        // If posts were interacted with on the detail page, invalidate cache
         const ids = consumeDirtyPostIds();
         if (ids.length > 0) {
           feedCache = null;
@@ -253,7 +256,7 @@ export default function HomePage() {
         if (!entry.isIntersecting) continue;
         if (!loadingRef.current && hasMoreRef.current) {
           const endpoint = tab === "recommend" ? "/api/feed/recommend" : "/api/feed/following";
-          void fetchFeed(endpoint, "subsequent", true);
+          void fetchFeed(endpoint, true);
         }
       }
     });

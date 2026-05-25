@@ -5,10 +5,10 @@ import (
 	"github.com/seki18/lingdu-feed/internal/model"
 )
 
-// FilterPostIDs removes IDs that the user has already consumed (excludeIDs)
-// or has a state > StateDelivered. Pass checkStatus=false to skip the state filter.
+// FilterPostIDs removes IDs that the user has already consumed
+// (state > StateDelivered). Pass checkStatus=false to skip the state filter.
 // Returns the filtered slice, preserving order.
-func FilterPostIDs(ids []int, excludeIDs []int, userID int, checkStatus bool) ([]int, error) {
+func FilterPostIDs(ids []int, userID int, checkStatus bool) ([]int, error) {
 	if len(ids) == 0 {
 		return ids, nil
 	}
@@ -24,22 +24,7 @@ func FilterPostIDs(ids []int, excludeIDs []int, userID int, checkStatus bool) ([
 	}
 	ids = deduped
 
-	// Step 2: exclude explicit IDs
-	if len(excludeIDs) > 0 {
-		exclude := make(map[int]bool, len(excludeIDs))
-		for _, id := range excludeIDs {
-			exclude[id] = true
-		}
-		filtered := make([]int, 0, len(ids))
-		for _, id := range ids {
-			if !exclude[id] {
-				filtered = append(filtered, id)
-			}
-		}
-		ids = filtered
-	}
-
-	// Step 3: state filter — batch query states for these IDs
+	// Step 2: state filter — batch query states for these IDs
 	if checkStatus && len(ids) > 0 {
 		query, args, err := common.DB.BindNamed(`
 			SELECT post_id FROM states

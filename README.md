@@ -4,9 +4,11 @@ A community content feed platform built with **Go (Gin)** + **Next.js 16 (React 
 
 This system is designed as a **feed-based recommendation backend**, focusing on:
 
-- hybrid ranking feed generation
+- hybrid ranking feed generation with scheduled score computation
+- Redis caching for hot feed data and user follow lists
+- cursor-based pagination across multiple recall sources
 - state-based deduplication pipeline
-- user behavior tracking signals
+- user behavior tracking signals (view, click-through-rate)
 - scalable backend architecture (Handler → Service → Repository)
 
 ---
@@ -19,7 +21,8 @@ This system is designed as a **feed-based recommendation backend**, focusing on:
 | **Posts** | CRUD with title + content, owner-only edit/delete |
 | **Comments** | Nested replies, cascade delete |
 | **Social** | Like/unlike, favorite/unfavorite, follow/unfollow |
-| **Feeds** | Hybrid feed system (recommend + following + history) with state-based deduplication |
+| **Cache** | Redis: ranking ZSET (top 20 by score), candidate ZSET (latest 20), follow SET (24h TTL); cache-first with DB fallback |
+| **Feeds** | Hybrid feed system (recommend + recent + following) with cursor-based pagination and state-based deduplication |
 | **Tracking** | State pipeline (delivered → exposed → clicked) for feed deduplication and ranking signals |
 | **API** | Unified JSON envelope `{ code, message, data }` with pagination |
 
@@ -31,6 +34,7 @@ This system is designed as a **feed-based recommendation backend**, focusing on:
 |---|---|
 | Backend | Go 1.26 + Gin v1.12 + sqlx v1.4 + PostgreSQL 16 |
 | Frontend | Next.js 16 + React 19 + TypeScript 5 + Tailwind CSS 4 |
+| Cache | Redis 7 + go-redis/v9 |
 | Auth | golang-jwt v5 + bcrypt |
 | Infra | Docker Compose (PostgreSQL 16, Redis 7) |
 
@@ -71,14 +75,16 @@ lingdu-feed/
 │   ├── config/config.go
 │   ├── migrations/001_init.sql
 │   └── internal/
-│       ├── common/        # DB pool, errors, response helpers
+│       ├── common/        # DB pool, Redis client, errors, response helpers
 │       ├── handler/       # HTTP handlers → feed, post, social, follow, state, user
 │       ├── middleware/    # AuthMiddleware, SoftAuthMiddleware
 │       ├── model/         # DB models + request/response DTOs
+│       ├── cache/         # Redis business logic (ranking, candidate, follow)
 │       ├── repository/    # Raw SQL (sqlx), one file per table
 │       ├── router/        # Route groups & middleware binding
+│       ├── scheduler/     # Background tasks (score recalculation)
 │       ├── service/       # Business logic orchestration
-│       └── utils/         # JWT, Gin helpers
+│       └── utils/         # JWT, filter helpers, Gin helpers
 ├── frontend/
 │   └── src/
 │       ├── app/           # App Router (feed, posts/[id], users/[id], history, collections)
@@ -106,11 +112,13 @@ This design allows:
 
 ### Design Highlights
 
-- Hybrid feed generation instead of single ranking strategy
+- Scheduled score computation with CTR metric, decoupled from query time
+- Redis caching layer for hot rankings, latest posts, and follow lists
+- Hybrid feed generation from three recall sources (recommend / recent / following)
+- Cursor-based pagination across all recall sources for scalable feed loading
 - State-based deduplication instead of naive caching
 - Batch tracking to reduce network overhead
 - Separation of state tracking and future event-based analytics
-- Cursor-based pagination for scalable feed loading
 
 ### Database Schema
 
@@ -155,7 +163,7 @@ All routes use `/api` prefix.
 | `GET` | `/api/feed/history` | Auth |
 | `GET` | `/api/feed/favorites` | Auth |
 
-Params: `request_type` (`initial`/`subsequent`), `current_ids`, `page`, `page_size`
+Params: `request_type` (`initial`/`subsequent`), `cursor` (pagination id), `page`, `page_size`
 
 ### Post
 
@@ -218,39 +226,57 @@ Paginated: `{ "items": [...], "total": 42, "page": 1, "page_size": 20 }`
 
 ## Feed Algorithm (Hybrid Ranking System)
 
-The feed system uses a hybrid ranking strategy combining:
+The feed system uses a hybrid ranking strategy combining content freshness,
+user engagement signals, and social graph signals.
 
-- content freshness
-- user engagement signals
-- social graph signals
+### Score Formula (computed periodically by scheduler)
 
-### Scoring
+A normalized score ∈ [0, 1] is recalculated every minute:
 
-```
-score = recency × 0.1 + views × 3 + likes × 5 + favorites × 4 + comments × 4
-```
+| Component | Weight | Formula | Purpose |
+|---|---|---|---|
+| Recency | 15% | `EXP(-age / 7d-half-life)` | Time decay, 7-day half-life |
+| Popularity | 35% | `tanh(views / 200)` | Absolute view volume |
+| CTR | 20% | `views / expose_count` | Click-through rate |
+| Likes | 15% | `tanh(likes / 50)` | Like engagement |
+| Comments | 10% | `tanh(comments / 30)` | Discussion engagement |
+| Favorites | 5% | `tanh(favorites / 30)` | Save/bookmark rate |
 
-### Composition
+The scoring is decoupled from query time: on startup, a full-table update runs;
+subsequently, only posts modified within the last 24 hours are recalculated
+each tick. This avoids expensive per-request computation.
 
-| Source | Share | Filter |
-|---|---|---|
-| Recommend | ≥50% | Top-N by score, no state filter |
-| Recent | ~33% | Latest posts, state-filtered |
-| Following | ~17% | From followed users, state-filtered |
+### Cache Architecture
+
+Three Redis caches accelerate the feed pipeline:
+
+| Cache | Structure | Contents | TTL / Cap |
+|---|---|---|---|
+| `ranking` | ZSET | Top 20 posts by score | refreshed on scheduler tick |
+| `candidate` | ZSET | Latest 20 posts by `created_time` | capped at 20, written on post creation |
+| `follow:<uid>` | STRING (JSON) | User's following ID list | 24 hours, invalidated on follow/unfollow |
+
+All reads are cache-first with DB fallback. The ranking and candidate caches
+support cursor-based filtering so cached data is usable beyond the first page.
+
+### Feed Composition
+
+Three recall sources are combined per request:
+
+| Source | Share | Sort | Cursor |
+|---|---|---|---|
+| Recommend | ≥50% | `score DESC, id DESC` | `id < cursorID` |
+| Recent | ~33% | `created_time DESC` | `id < cursorID` |
+| Following | ~17% | `created_time DESC` | `id < cursorID` |
+
+All sources share a single `id` cursor for reliable, lossless pagination
+across dynamic data.
 
 ### Degradation
 
-If normal requests return insufficient posts, the system auto-degrades: refetches from the recommend pool *without* the state filter, allowing previously-seen posts to fill remaining slots. The `excludeIDs` list is always preserved to avoid duplicates on the current page.
-
-### State Pipeline (Feed Deduplication System)
-
-This pipeline ensures feed consistency, deduplication, and interaction signal collection across sessions.
-
-```
-Delivered (1) → Exposed (2) → Clicked (3)
-```
-
-Reported in batch (500ms debounce). View count increments on first click only.
+If normal requests return insufficient posts, the system auto-degrades:
+refetches from the recommend pool *without* the state filter, allowing
+previously-seen posts to fill remaining slots.
 
 ---
 
@@ -265,7 +291,7 @@ Reported in batch (500ms debounce). View count increments on first click only.
 
 ### Optimizations
 
-- [ ] **Caching Layer** — Introduce Redis for hot feed data and session caching to reduce DB load
+- [ ] **Stats Table Split** — Extract like_count, comment_count, favorite_count, view_count from `posts` into a separate `post_stats` table; introduce Redis caching for hot post stats to reduce DB write pressure on every like/comment/favorite toggle
 - [ ] **Cloud Migration** — Migrate static assets to cloud object storage (S3/OSS) and deploy services to a cloud platform
 
 ---
