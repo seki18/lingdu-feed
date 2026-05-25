@@ -24,6 +24,12 @@ func UpsertState(c *gin.Context) {
 	req.UserID = userID.(int)
 	log.Printf("[UpsertState] Request: post_id=%d user_id=%d status=%d", req.PostID, req.UserID, req.Status)
 
+	// Fetch previous state before upserting (so we can detect transitions)
+	prevStatus := model.StateUnknown
+	if existing, err := service.GetState(req); err == nil {
+		prevStatus = existing.Status
+	}
+
 	err := service.UpsertState(req)
 	if err != nil {
 		log.Printf("[UpsertState] Service error: %v", err)
@@ -31,10 +37,11 @@ func UpsertState(c *gin.Context) {
 		return
 	}
 
-	prevStatus := model.StateUnknown
-	if existing, err := service.GetState(req); err == nil {
-		prevStatus = existing.Status
+	// First time a post becomes exposed → increment expose_count
+	if req.Status >= model.StateExposed && prevStatus < model.StateExposed {
+		_ = repository.IncrExposeCount(req.PostID)
 	}
+	// First time a post is clicked → increment view_count
 	if req.Status >= model.StateClicked && prevStatus < model.StateClicked {
 		_ = repository.IncrViewCount(req.PostID)
 	}
@@ -61,6 +68,11 @@ func BatchUpsertState(c *gin.Context) {
 		if err := service.UpsertState(reqs[i]); err != nil {
 			log.Printf("[BatchUpsertState] Service error at index %d: %v", i, err)
 		}
+		// First time a post becomes exposed → increment expose_count
+		if reqs[i].Status >= model.StateExposed && prevStatus < model.StateExposed {
+			_ = repository.IncrExposeCount(reqs[i].PostID)
+		}
+		// First time a post is clicked → increment view_count
 		if reqs[i].Status >= model.StateClicked && prevStatus < model.StateClicked {
 			_ = repository.IncrViewCount(reqs[i].PostID)
 		}

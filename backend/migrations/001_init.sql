@@ -25,12 +25,15 @@ CREATE TABLE IF NOT EXISTS posts (
     comment_count    INT             NOT NULL DEFAULT 0,
     favorite_count   INT             NOT NULL DEFAULT 0,
     view_count       INT             NOT NULL DEFAULT 0,
+    expose_count     INT             NOT NULL DEFAULT 0,
+    score            DOUBLE PRECISION NOT NULL DEFAULT 0,
     created_time     TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
     updated_time     TIMESTAMPTZ     NOT NULL DEFAULT NOW()
 );
 
 CREATE INDEX idx_posts_user_id ON posts(user_id);
 CREATE INDEX idx_posts_created_time ON posts(created_time DESC);
+CREATE INDEX idx_posts_score ON posts(score DESC);
 CREATE INDEX idx_posts_user_created_time ON posts(user_id, created_time DESC);
 
 -- Comments table

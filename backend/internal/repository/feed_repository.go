@@ -150,13 +150,7 @@ func GetRecommendPostIDs(count int, excludeIDs []int, userID int, allowDegraded 
 	}
 
 	query += `
-		ORDER BY (
-			EXTRACT(EPOCH FROM p.created_time) * 0.1 +
-			p.view_count * 3 +
-			p.like_count * 5 +
-			p.favorite_count * 4 +
-			p.comment_count * 4
-		) DESC
+		ORDER BY p.score DESC, p.created_time DESC
 		LIMIT ?
 	`
 	args = append(args, count)

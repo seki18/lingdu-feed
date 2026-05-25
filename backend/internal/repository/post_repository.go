@@ -235,8 +235,14 @@ func DecrFavoriteCount(postID int) error {
 	return err
 }
 
+// IncrExposeCount atomically increments the expose_count for a post.
+func IncrExposeCount(postID int) error {
+	_, err := common.DB.Exec(`UPDATE posts SET expose_count = expose_count + 1, updated_time = NOW() WHERE id = $1`, postID)
+	return err
+}
+
 // IncrViewCount atomically increments the view_count for a post.
 func IncrViewCount(postID int) error {
-	_, err := common.DB.Exec(`UPDATE posts SET view_count = view_count + 1 WHERE id = $1`, postID)
+	_, err := common.DB.Exec(`UPDATE posts SET view_count = view_count + 1, updated_time = NOW() WHERE id = $1`, postID)
 	return err
 }

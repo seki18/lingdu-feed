@@ -4,6 +4,7 @@ import (
 	"github.com/seki18/lingdu-feed/config"
 	"github.com/seki18/lingdu-feed/internal/common"
 	"github.com/seki18/lingdu-feed/internal/router"
+	"github.com/seki18/lingdu-feed/internal/scheduler"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
@@ -37,6 +38,9 @@ func main() {
 	}))
 
 	router.RegisterRoutes(r)
+
+	// Start background score scheduler: full update on startup, then every 1 minute
+	go scheduler.RunScoreScheduler()
 
 	r.Run(":18080")
 }
