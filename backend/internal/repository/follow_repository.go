@@ -126,3 +126,14 @@ func GetFollowerListByFollowingID(followingID int, page, pageSize int) ([]model.
 
 	return follows, total, err
 }
+
+// GetAllFollowingIDs returns all following user IDs for a given follower (no pagination).
+func GetAllFollowingIDs(followerID int) ([]int, error) {
+	var ids []int
+	err := common.DB.Select(&ids, `
+		SELECT following_id
+		FROM follows
+		WHERE follower_id = $1
+	`, followerID)
+	return ids, err
+}

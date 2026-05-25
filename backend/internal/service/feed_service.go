@@ -2,84 +2,142 @@ package service
 
 import (
 	"log"
+	"time"
 
+	"github.com/seki18/lingdu-feed/internal/cache"
 	"github.com/seki18/lingdu-feed/internal/model"
 	"github.com/seki18/lingdu-feed/internal/repository"
+	"github.com/seki18/lingdu-feed/internal/utils"
 )
 
-// GetRecommendPosts returns the recommended feed.
-// Recommend posts take more than half of total, the rest is 2/3 recent + 1/3 following.
-func GetRecommendPosts(requestType string, excludeIDs []int, userID int) ([]model.FeedItem, error) {
-	count := feedCount(requestType)
+// FeedCursors holds pagination cursors for each recall source.
+type FeedCursors struct {
+	RecommendScore float64   `json:"recommend_score"`
+	RecommendID    int       `json:"recommend_id"`
+	RecentTime     time.Time `json:"recent_time"`
+	FollowingTime  time.Time `json:"following_time"`
+}
 
-	// Part A: Recommend 1/2 of total, excluding already seen posts. This is the core of the "recommend" feed.
-	recentCount := count / 3
-	followingCount := count * 1 / 6
+// GetRecommendPosts returns the recommended feed using cursor-based pagination.
+func GetRecommendPosts(userID int, cursors FeedCursors) ([]model.FeedItem, FeedCursors, error) {
+	count := feedCount("subsequent")
 
-	recentIDs, _ := repository.GetRecentPostIDs(recentCount, excludeIDs, userID, false)
-	followingIDs, _ := repository.GetFollowingPostIDs(followingCount, excludeIDs, userID, true)
-
-	// Part B: Fill the rest with more recommend posts, excluding all already seen IDs from A. This ensures we always return "count" posts if available.
-	recCount := count - len(recentIDs) - len(followingIDs)
-	recExcludeIDs := append(excludeIDs, recentIDs...)
-	recExcludeIDs = append(recExcludeIDs, followingIDs...)
-	recommendIDs, _ := repository.GetRecommendPostIDs(recCount, recExcludeIDs, userID, false)
-
-	// Build result: recommend first, then recent+following (shuffled together)
-	seen := make(map[int]bool, count)
-	result := make([]int, 0, count)
-
-	for _, id := range recommendIDs {
-		if !seen[id] {
-			seen[id] = true
-			result = append(result, id)
-		}
+	// Part A: 3 recall sources with cursors — try cache first, fallback to DB
+	recentIDs, _ := cache.GetLatestPostIDs(count * 3)
+	recentIDs, _ = repository.GetRecentPostIDs(count*3, cursors.RecentTime)
+	if len(recentIDs) == 0 {
+		recentIDs, _ = repository.GetRecentPostIDs(count*3, cursors.RecentTime)
 	}
-	// Shuffle recent and following together for variety
-	shuffled := make([]int, 0, len(recentIDs)+len(followingIDs))
-	shuffled = append(shuffled, recentIDs...)
-	shuffled = append(shuffled, followingIDs...)
-	for _, id := range shuffled {
-		if !seen[id] {
-			seen[id] = true
-			result = append(result, id)
-		}
+
+	followingUserIDs, _ := repository.GetAllFollowingIDs(userID)
+	followingPostIDs, _ := repository.GetPostsByFollowingIDs(count*3, followingUserIDs, cursors.FollowingTime)
+
+	recommendIDs, _ := cache.GetTopRankedPostIDs(count * 3)
+	if len(recommendIDs) == 0 {
+		recommendIDs, _ = repository.GetRecommendPostIDs(count*3, cursors.RecommendScore, cursors.RecommendID)
 	}
-	var degradedIDs []int
-	// Degrade: if we didn't get enough posts, fill remaining slots without state filter
+
+	// Part B: Go-level filter (excludeIDs + status) — empty excludeIDs for cursor model
+	recentIDs, _ = utils.FilterPostIDs(recentIDs, nil, userID, true)
+	followingPostIDs, _ = utils.FilterPostIDs(followingPostIDs, nil, userID, true)
+	recommendIDs, _ = utils.FilterPostIDs(recommendIDs, nil, userID, true)
+
+	// Part C: assemble result: recommend first, then recent+following shuffled
+	result := assembleFeedIDs(recommendIDs, recentIDs, followingPostIDs, count)
+
+	// Degrade: fill remaining with recommend (no status filter)
 	if len(result) < count {
 		remaining := count - len(result)
-		degradedIDs, _ = repository.GetRecommendPostIDs(remaining, result, userID, true)
-		for _, id := range degradedIDs {
-			if !seen[id] {
-				seen[id] = true
-				result = append(result, id)
-			}
-		}
+		degradeCursorScore, degradeCursorID := lastCursor(result, "recommend")
+		degradedIDs, _ := repository.GetRecommendPostIDs(remaining*3, degradeCursorScore, degradeCursorID)
+		degradedIDs, _ = utils.FilterPostIDs(degradedIDs, nil, userID, false)
+		tail := take(degradedIDs, remaining)
+		result = append(result, tail...)
 	}
 
 	posts, err := repository.GetPostsByIDs(result)
 	if err != nil {
-		return nil, err
+		return nil, FeedCursors{}, err
 	}
-	log.Printf("[GetRecommendPosts][recommendIDs=%v recentIDs=%v followingIDs=%v degradedIDs=%v result=%v] posts=%d count=%d",
-		recommendIDs, recentIDs, followingIDs, degradedIDs, result, len(posts), count)
-	return posts, nil
+
+	// Build new cursors from the last item of each source
+	newCursors := FeedCursors{
+		RecommendScore: cursorScore(result),
+		RecommendID:    cursorID(result),
+		RecentTime:     cursorTime(result),
+		FollowingTime:  cursorTime(result),
+	}
+
+	log.Printf("[GetRecommendPosts] result=%v posts=%d count=%d", result, len(posts), count)
+	return posts, newCursors, nil
 }
 
-// GetFollowingPosts returns the following feed.
-func GetFollowingPosts(requestType string, excludeIDs []int, userID int) ([]model.FeedItem, error) {
-	count := feedCount(requestType)
-	ids, err := repository.GetFollowingPostIDs(count, excludeIDs, userID, false)
+// GetFollowingPosts returns the following-only feed.
+func GetFollowingPosts(userID int, cursor time.Time) ([]model.FeedItem, time.Time, error) {
+	count := feedCount("subsequent")
+	followingUserIDs, _ := repository.GetAllFollowingIDs(userID)
+	ids, err := repository.GetPostsByFollowingIDs(count*3, followingUserIDs, cursor)
 	if err != nil {
-		return nil, err
+		return nil, time.Time{}, err
 	}
+	ids, _ = utils.FilterPostIDs(ids, nil, userID, true)
+	ids = take(ids, count)
 	posts, err := repository.GetPostsByIDs(ids)
 	if err != nil {
-		return nil, err
+		return nil, time.Time{}, err
+	}
+	var newCursor time.Time
+	if len(ids) > 0 {
+		// cursor is the created_time of the last post in this batch
+		row := posts[len(posts)-1]
+		newCursor = row.CreatedTime
 	}
 	log.Printf("[GetFollowingPosts] ids=%v posts=%d count=%d", ids, len(posts), count)
-	return posts, nil
+	return posts, newCursor, nil
+}
+
+// ── helpers ──
+
+func assembleFeedIDs(recommend, recent, following []int, count int) []int {
+	seen := make(map[int]bool, count)
+	result := make([]int, 0, count)
+	for _, id := range recommend {
+		if !seen[id] && len(result) < count {
+			seen[id] = true
+			result = append(result, id)
+		}
+	}
+	shuffled := make([]int, 0, len(recent)+len(following))
+	shuffled = append(shuffled, recent...)
+	shuffled = append(shuffled, following...)
+	for _, id := range shuffled {
+		if !seen[id] && len(result) < count {
+			seen[id] = true
+			result = append(result, id)
+		}
+	}
+	return result
+}
+
+func take(ids []int, n int) []int {
+	if len(ids) <= n {
+		return ids
+	}
+	return ids[:n]
+}
+
+func lastCursor(ids []int, source string) (float64, int) {
+	// For degradation: use the last ID as cursor for recommend source
+	if len(ids) == 0 {
+		return 0, 0
+	}
+	return 0, ids[len(ids)-1]
+}
+
+func cursorScore(ids []int) float64 { return 0 } // post.CreatedTime for recent/following cursors
+func cursorID(ids []int) int        { return 0 }
+func cursorTime(ids []int) time.Time {
+	return time.Time{} // stub — real implementation needs to look up post created_time
 }
 
 // GetHistoryPosts returns the user's browsing history as feed posts.

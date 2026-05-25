@@ -16,6 +16,7 @@ func main() {
 
 	cfg := config.LoadConfig()
 	common.Init(cfg)
+	common.InitRedis(cfg)
 
 	r := gin.Default()
 	r.Use(cors.New(cors.Config{

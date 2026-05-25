@@ -4,6 +4,7 @@ import (
 	"log"
 	"time"
 
+	"github.com/seki18/lingdu-feed/internal/cache"
 	"github.com/seki18/lingdu-feed/internal/common"
 )
 
@@ -54,6 +55,11 @@ func CalculateAndUpdateScores(fullUpdate bool) {
 	}
 	rows, _ := result.RowsAffected()
 	log.Printf("[ScoreScheduler] Score update completed, rows affected: %d, fullUpdate: %v", rows, fullUpdate)
+
+	// Refresh ranking cache with new scores
+	if err := cache.RefreshRanking(); err != nil {
+		log.Printf("[ScoreScheduler] Failed to refresh ranking cache: %v", err)
+	}
 }
 
 // RunScoreScheduler starts the score calculation loop.

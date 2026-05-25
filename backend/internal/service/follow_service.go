@@ -42,3 +42,8 @@ func GetFollowingListByFollowerID(followerID int, page, pageSize int) ([]model.F
 func GetFollowerListByFollowingID(followingID int, page, pageSize int) ([]model.Follow, int, error) {
 	return repository.GetFollowerListByFollowingID(followingID, page, pageSize)
 }
+
+// GetAllFollowingIDs returns all following user IDs for a given follower (no pagination).
+func GetAllFollowingIDs(followerID int) ([]int, error) {
+	return repository.GetAllFollowingIDs(followerID)
+}

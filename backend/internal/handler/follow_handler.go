@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/seki18/lingdu-feed/internal/cache"
 	"github.com/seki18/lingdu-feed/internal/common"
 	"github.com/seki18/lingdu-feed/internal/model"
 	"github.com/seki18/lingdu-feed/internal/repository"
@@ -40,6 +41,7 @@ func CreateFollow(c *gin.Context) {
 	}
 	_ = repository.IncrFollowingCount(followerID)
 	_ = repository.IncrFollowerCount(followingID)
+	cache.InvalidateFollow(followerID)
 	common.Success(c, follow)
 }
 
@@ -66,6 +68,7 @@ func DeleteFollow(c *gin.Context) {
 	}
 	_ = repository.DecrFollowingCount(followerID)
 	_ = repository.DecrFollowerCount(followingID)
+	cache.InvalidateFollow(followerID)
 	common.Success(c, nil)
 }
 

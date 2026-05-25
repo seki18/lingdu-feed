@@ -76,3 +76,19 @@ func CheckFavorited(userID, postID int) (bool, error) {
 	`, userID, postID)
 	return exists, err
 }
+
+// GetFavoritePostIDs returns post IDs that the user has favorited.
+func GetFavoritePostIDs(userID, page, pageSize int) ([]int, int, error) {
+	var total int
+	if err := common.DB.Get(&total, `SELECT COUNT(1) FROM favorites WHERE user_id = $1`, userID); err != nil {
+		return nil, 0, err
+	}
+	offset := (page - 1) * pageSize
+	var ids []int
+	err := common.DB.Select(&ids, `
+		SELECT post_id FROM favorites
+		WHERE user_id = $1
+		ORDER BY created_time DESC LIMIT $2 OFFSET $3
+	`, userID, pageSize, offset)
+	return ids, total, err
+}

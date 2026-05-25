@@ -2,6 +2,7 @@ package repository
 
 import (
 	"errors"
+	"time"
 
 	"github.com/seki18/lingdu-feed/internal/common"
 	"github.com/seki18/lingdu-feed/internal/model"
@@ -197,6 +198,71 @@ func GetPostsByUserID(userID int, page, pageSize int) ([]model.FeedItem, int, er
 	`, userID, pageSize, offset)
 
 	return posts, total, err
+}
+
+// GetRecentPostIDs returns the most recent post IDs, newest first.
+// cursor is the created_time of the last item from the previous page; pass zero for the first page.
+func GetRecentPostIDs(count int, cursor time.Time) ([]int, error) {
+	query, args, err := sqlx.In(`
+		SELECT p.id
+		FROM posts as p
+		WHERE (? = '0001-01-01 00:00:00'::timestamp OR p.created_time < ?)
+		ORDER BY p.created_time DESC
+		LIMIT ?
+	`, cursor, cursor, count)
+	if err != nil {
+		return nil, err
+	}
+	query = common.DB.Rebind(query)
+
+	var ids []int
+	if err := common.DB.Select(&ids, query, args...); err != nil {
+		return nil, err
+	}
+	return ids, nil
+}
+
+// GetPostsByFollowingIDs returns post IDs from the given following user ID list.
+// cursor is the created_time of the last item from the previous page; pass zero for the first page.
+func GetPostsByFollowingIDs(count int, followingIDs []int, cursor time.Time) ([]int, error) {
+	if len(followingIDs) == 0 {
+		return []int{}, nil
+	}
+
+	query, args, err := sqlx.In(`
+		SELECT p.id
+		FROM posts as p
+		WHERE p.user_id IN (?)
+		AND (? = '0001-01-01 00:00:00'::timestamp OR p.created_time < ?)
+		ORDER BY p.created_time DESC
+		LIMIT ?
+	`, followingIDs, cursor, cursor, count)
+	if err != nil {
+		return nil, err
+	}
+	query = common.DB.Rebind(query)
+
+	var ids []int
+	if err := common.DB.Select(&ids, query, args...); err != nil {
+		return nil, err
+	}
+	return ids, nil
+}
+
+// GetRecommendPostIDs returns post IDs ranked by weighted score.
+// cursorScore/cursorID are the (score, id) of the last item from the previous page.
+func GetRecommendPostIDs(count int, cursorScore float64, cursorID int) ([]int, error) {
+	query := `
+		SELECT p.id FROM posts p
+		WHERE (($1 = 0 AND $2 = 0) OR p.score < $1 OR (p.score = $1 AND p.id < $2))
+		ORDER BY p.score DESC, p.id DESC
+		LIMIT $3
+	`
+	var ids []int
+	if err := common.DB.Select(&ids, query, cursorScore, cursorID, count); err != nil {
+		return nil, err
+	}
+	return ids, nil
 }
 
 // IncrLikeCount atomically increments the like_count for a post.

@@ -91,3 +91,19 @@ func GetViewCountByPostID(postID int) (int, error) {
 	`, postID, model.StateClicked)
 	return count, err
 }
+
+// GetHistoryPostIDs returns post IDs that the user has viewed (clicked).
+func GetHistoryPostIDs(userID, page, pageSize int) ([]int, int, error) {
+	var total int
+	if err := common.DB.Get(&total, `SELECT COUNT(1) FROM states WHERE user_id = $1 AND status = $2`, userID, model.StateClicked); err != nil {
+		return nil, 0, err
+	}
+	offset := (page - 1) * pageSize
+	var ids []int
+	err := common.DB.Select(&ids, `
+		SELECT post_id FROM states
+		WHERE user_id = $1 AND status = $2
+		ORDER BY updated_time DESC LIMIT $3 OFFSET $4
+	`, userID, model.StateClicked, pageSize, offset)
+	return ids, total, err
+}

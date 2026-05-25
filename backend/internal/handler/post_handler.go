@@ -5,7 +5,9 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
+	"github.com/seki18/lingdu-feed/internal/cache"
 	"github.com/seki18/lingdu-feed/internal/common"
 	"github.com/seki18/lingdu-feed/internal/model"
 	"github.com/seki18/lingdu-feed/internal/repository"
@@ -33,6 +35,9 @@ func CreatePost(c *gin.Context) {
 	}
 
 	common.Success(c, post)
+
+	// Write to candidate cache (best-effort, ignore errors)
+	_ = cache.AddCandidate(post.ID, time.Now().Unix())
 }
 
 // UpdatePost handles PUT /post (auth required). Updates an existing post.
