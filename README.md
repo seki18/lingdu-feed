@@ -43,8 +43,8 @@ This system is designed as a **feed-based recommendation backend**, focusing on:
 ## Quick Start
 
 ```bash
-# 1. Start PostgreSQL
-docker compose up -d postgres
+# 1. Start PostgreSQL & Redis
+docker compose up -d postgres redis
 
 # 2. Run migration
 docker compose exec -T postgres psql -U admin -d community < backend/migrations/001_init.sql
@@ -54,7 +54,10 @@ echo "DB_HOST=localhost
 DB_PORT=15432
 DB_USER=admin
 DB_PASSWORD=password
-DB_NAME=community" > backend/.env
+DB_NAME=community
+REDIS_ADDR=localhost:6379
+REDIS_PASSWORD=
+REDIS_DB=0" > backend/.env
 
 # 4. Start backend (:18080)
 cd backend && go run cmd/main.go
