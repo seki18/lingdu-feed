@@ -38,7 +38,8 @@ func GetLatestPostIDs(count int) ([]int, error) {
 }
 
 // AddCandidate adds a newly created post to the candidate cache.
-// The score is the Unix timestamp of creation. Caps the ZSET at 20 members.
+// The score is the Unix timestamp of creation.
+// Prunes entries older than 3 days to keep the ZSET from growing unbounded.
 func AddCandidate(postID int, createdUnix int64) error {
 	if common.Redis == nil {
 		return nil
@@ -56,13 +57,10 @@ func AddCandidate(postID int, createdUnix int64) error {
 		return err
 	}
 
-	// Keep only the top 20 (highest score = newest)
-	// ZREMRANGEBYRANK keeps elements with rank 0..(N-1) — lowest scores
-	total, _ := common.Redis.ZCard(ctx, candidateKey).Result()
-	if total > 20 {
-		if err := common.Redis.ZRemRangeByRank(ctx, candidateKey, 0, total-21).Err(); err != nil {
-			log.Printf("[CandidateCache] Trim failed: %v", err)
-		}
+	// Prune entries older than 3 days
+	threeDaysAgo := float64(time.Now().AddDate(0, 0, -3).Unix())
+	if err := common.Redis.ZRemRangeByScore(ctx, candidateKey, "-inf", strconv.FormatFloat(threeDaysAgo, 'f', 0, 64)).Err(); err != nil {
+		log.Printf("[CandidateCache] Prune failed: %v", err)
 	}
 	return nil
 }

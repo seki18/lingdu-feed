@@ -43,7 +43,7 @@ func GetTopRankedPostIDs(count int) ([]int, error) {
 	return ids, nil
 }
 
-// RefreshRanking rebuilds the ranking cache with the top 20 posts by score.
+// RefreshRanking rebuilds the ranking cache with the top 1000 posts by score.
 func RefreshRanking() error {
 	if common.Redis == nil {
 		return nil
@@ -52,12 +52,12 @@ func RefreshRanking() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	// Fetch top 20 post IDs with scores from DB
+	// Fetch top 1000 post IDs with scores from DB
 	var rows []struct {
 		ID    int     `db:"id"`
 		Score float64 `db:"score"`
 	}
-	if err := common.DB.Select(&rows, `SELECT id, score FROM post_stats ORDER BY score DESC LIMIT 20`); err != nil {
+	if err := common.DB.Select(&rows, `SELECT id, score FROM post_stats ORDER BY score DESC LIMIT 1000`); err != nil {
 		log.Printf("[RankingCache] DB query failed: %v", err)
 		return err
 	}

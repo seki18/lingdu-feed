@@ -21,7 +21,7 @@ This system is designed as a **feed-based recommendation backend**, focusing on:
 | **Posts** | CRUD with title + content, owner-only edit/delete |
 | **Comments** | Nested replies, cascade delete |
 | **Social** | Like/unlike, favorite/unfavorite, follow/unfollow |
-| **Cache** | Redis: ranking ZSET, candidate ZSET, follow SET; feeditem HASH, content STRING, stats HASH, state SET with sliding TTL; all cache-first with DB fallback |
+| **Cache** | Redis: ranking ZSET, candidate ZSET, follow SET, feeditem HASH, content STRING, stats HASH, consumed state SET; cache-first, write-back, and write-through patterns |
 | **Feeds** | Hybrid feed system (recommend + recent + following) with cursor-based pagination and state-based deduplication |
 | **Tracking** | State pipeline (delivered → exposed → clicked) for feed deduplication and ranking signals |
 | **API** | Unified JSON envelope `{ code, message, data }` with pagination |
@@ -116,7 +116,7 @@ This design allows:
 ### Design Highlights
 
 - Scheduled score computation with CTR metric, decoupled from query time
-- Redis caching layer for hot rankings, latest posts, and follow lists
+- Redis hybrid state store (cache + write-back stats + persistent state)
 - Hybrid feed generation from three recall sources (recommend / recent / following)
 - Cursor-based pagination across all recall sources for scalable feed loading
 - State-based deduplication instead of naive caching
@@ -249,23 +249,34 @@ The scoring is decoupled from query time: on startup, a full-table update runs;
 subsequently, only posts modified within the last 24 hours are recalculated
 each tick. This avoids expensive per-request computation.
 
-### Cache Architecture
+### Redis Architecture
 
-Six Redis caches accelerate the system across different data types:
+The system uses Redis as a hybrid state store — combining pure caching (cache-first with DB fallback),
+write-back buffering (stats HINCRBY → batch sync), and persistence for user state (consumed SET with sliding TTL).
 
-| Cache | Structure | Contents | TTL | Write Strategy |
+| Key | Structure | Contents | TTL / Cap | Write Strategy |
 |---|---|---|---|---|
-| `ranking` | ZSET | Top 20 posts by score | refreshed on scheduler tick | scheduler → DB → Redis |
-| `candidate` | ZSET | Latest 20 posts by `created_time` | capped at 20 | post creation → SADD |
-| `follow:<uid>` | SET (JSON) | User's following ID list | 24 hours | follow/unfollow → invalidate |
+| `ranking` | ZSET | Top 1000 posts by score | refreshed on scheduler tick | scheduler → DB → Redis |
+| `candidate` | ZSET | Posts from last 3 days by `created_time` | pruned: entries older than 3 days | post creation → ZADD + ZREMRANGEBYSCORE |
+| `follow:<uid>` | SET | User's following user IDs | 24 hours, invalidated on follow/unfollow | follow/unfollow → SADD/SREM or DEL |
 | `stats:{id}` | HASH | like/comment/favorite/view/expose count + score | 1 hour | HINCRBY on mutation, 30s batch sync to DB |
 | `feeditem:{id}` | HASH | id, user_id, username, title, created_time | 1 hour | post create/update → HSET, post delete → DEL |
 | `content:{id}` | STRING | post content text | 1 hour | post create/update → SETEX, post delete → DEL |
 | `consumed:{uid}` | SET | post IDs the user has seen (>delivered) | 30 min (sliding) | BatchUpsertState → SADD + EXPIRE |
 
-All caches use cache-first reads with DB fallback. The `stats` cache uses a write-back pattern (HINCRBY in Redis, batch sync to DB every 30s). The `consumed` state cache uses sliding TTL — active users keep their cache alive; inactive users' cache expires after 30 minutes.
+### Read / Write Patterns
 
-`FeedItem` and `content` caches reduce feed queries from hitting the database. `stats` cache absorbs high-frequency like/comment/view counters. `consumed` cache replaces per-request DB queries in `FilterPostIDs` with in-memory SET difference operations.
+- **Cache-first** (`ranking`, `candidate`, `follow`, `feeditem`, `content`): Try Redis first; on miss, fall back to DB and backfill cache.
+- **Write-back** (`stats`): Mutations hit Redis HINCRBY immediately. A background goroutine syncs all dirty stats to the `post_stats` table every 30 seconds.
+- **Write-through** (`consumed`): DB write (state) and Redis SADD happen simultaneously. Redis serves as a read-optimized replica. Sliding TTL keeps the SET alive for active users; inactive users' SET expires after 30 minutes and is rebuilt from DB on next request.
+
+### Design Rationale
+
+- `FeedItem` and `content`: reduce feed/detail queries from hitting the database. Feed item metadata is small (HASH) and rarely changes; content is large (TEXT) and only needed on the detail page.
+- `stats`: absorbs high-frequency like/comment/view counter mutations using Redis atomic HINCRBY, eliminating per-request DB UPDATEs.
+- `consumed`: replaces per-request DB queries in `FilterPostIDs` with an in-memory SET difference, significantly reducing feed assembly latency. This is the **user state store**, not a cache — it persists user consumption history for the session.
+- `ranking`: serves as a hot index; 1000 posts cover many pages of cursor-based pagination beyond the first page.
+- `candidate`: uses time-based pruning (3 days) instead of count-based capping (20), ensuring cursor pagination works correctly across all pages within the window.
 
 ### Feed Composition
 
