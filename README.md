@@ -256,7 +256,7 @@ write-back buffering (stats HINCRBY → batch sync), and persistence for user st
 
 | Key | Structure | Contents | TTL / Cap | Write Strategy |
 |---|---|---|---|---|
-| `ranking` | ZSET | Top 1000 posts by score | refreshed on scheduler tick | scheduler → DB → Redis |
+| `ranking` | ZSET | Top-N posts by score | refreshed on scheduler tick | scheduler → DB → Redis |
 | `candidate` | ZSET | Posts from last 3 days by `created_time` | pruned: entries older than 3 days | post creation → ZADD + ZREMRANGEBYSCORE |
 | `follow:<uid>` | SET | User's following user IDs | 24 hours, invalidated on follow/unfollow | follow/unfollow → SADD/SREM or DEL |
 | `stats:{id}` | HASH | like/comment/favorite/view/expose count + score | 1 hour | HINCRBY on mutation, 30s batch sync to DB |
@@ -274,8 +274,8 @@ write-back buffering (stats HINCRBY → batch sync), and persistence for user st
 
 - `FeedItem` and `content`: reduce feed/detail queries from hitting the database. Feed item metadata is small (HASH) and rarely changes; content is large (TEXT) and only needed on the detail page.
 - `stats`: absorbs high-frequency like/comment/view counter mutations using Redis atomic HINCRBY, eliminating per-request DB UPDATEs.
-- `consumed`: replaces per-request DB queries in `FilterPostIDs` with an in-memory SET difference, significantly reducing feed assembly latency. This is the **user state store**, not a cache — it persists user consumption history for the session.
-- `ranking`: serves as a hot index; 1000 posts cover many pages of cursor-based pagination beyond the first page.
+- `consumed`: replaces per-request DB queries in `FilterPostIDs` with an in-memory SET difference, significantly reducing feed assembly latency. Redis acts as a hot replica of persistent user consumption state.
+- `ranking`: serves as a hot index; Top-N posts cover many pages of cursor-based pagination beyond the first page.
 - `candidate`: uses time-based pruning (3 days) instead of count-based capping (20), ensuring cursor pagination works correctly across all pages within the window.
 
 ### Feed Composition
@@ -284,7 +284,7 @@ Three recall sources are combined per request:
 
 | Source | Share | Sort | Cursor |
 |---|---|---|---|
-| Recommend | ≥50% | `score DESC, id DESC` | `id < cursorID` |
+| Recommend | ≥50% | `score DESC, id DESC` | `(score, id) cursor` |
 | Recent | ~33% | `created_time DESC` | `id < cursorID` |
 | Following | ~17% | `created_time DESC` | `id < cursorID` |
 
