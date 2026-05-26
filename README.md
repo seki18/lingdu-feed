@@ -303,16 +303,22 @@ previously-seen posts to fill remaining slots.
 
 ## TODO
 
-### Features
+### Phase 1 — Infra & Delivery
 
-- [ ] **Image Upload** — Support post images (single/multiple) with file upload API and frontend preview
-- [ ] **Search** — Full-text search across posts, users, and comments
-- [ ] **User Audit Log** — Record user login/logout, page dwell time, and key actions for analytics
-- [ ] **Observability** — Structured logging, request tracing, error alerting, and incident investigation toolchain
+- [ ] **Image Upload (S3)** — Single/multiple image upload with S3-compatible storage, thumbnails, and CDN fronting
+- [ ] **Deployment** — Containerize services, deploy to cloud platform with auto-scaling
+- [ ] **CI/CD** — Automated build, test, lint, and deploy pipeline
+- [ ] **Observability** — Structured logging (ELK), distributed tracing (Jaeger/Otel), metrics (Prometheus + Grafana), alerting
 
-### Optimizations
+### Phase 2 — Features & Engagement
 
-- [ ] **Cloud Migration** — Migrate static assets to cloud object storage (S3/OSS) and deploy services to a cloud platform
+- [ ] **Search (Elasticsearch)** — Full-text search across posts, users, and comments with relevance ranking
+- [ ] **Notification** — Push/in-app notifications for likes, comments, follows, and system events
+- [ ] **Timeline Merge Deepening** — Smarter hybrid feed merging with decay curves, diversity constraints, and cold-start boosting
+
+### Phase 3 — Scale
+
+- [ ] **Kafka** — Event-driven architecture for async processing (feed delivery, notifications, analytics)
 
 ---
 
