@@ -165,7 +165,7 @@ export default function HomePage() {
       const { postId, likeCount, collectionCount: cc, commentCount: cmt } = (e as CustomEvent).detail;
       postsRef.current = postsRef.current.map(p =>
         p.id === postId
-          ? { ...p, like_count: likeCount ?? p.like_count, favorite_count: cc ?? p.favorite_count, comment_count: cmt ?? p.comment_count }
+          ? { ...p, stats: { ...p.stats, like_count: likeCount ?? p.stats?.like_count, favorite_count: cc ?? p.stats?.favorite_count, comment_count: cmt ?? p.stats?.comment_count, view_count: p.stats?.view_count ?? 0 } }
           : p
       );
       setPosts(postsRef.current);
@@ -225,7 +225,7 @@ export default function HomePage() {
       setPosts((current) => [{
         id: newPost.id, user_id: newPost.user_id, username: user.username,
         title: newPost.title, created_time: newPost.created_time,
-        like_count: 0, comment_count: 0, favorite_count: 0, view_count: 0,
+        stats: { like_count: 0, comment_count: 0, favorite_count: 0, view_count: 0 },
       }, ...current]);
       setTitle(""); setContent("");
       setShowCreateModal(false);

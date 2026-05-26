@@ -15,26 +15,33 @@ CREATE TABLE IF NOT EXISTS users (
     created_time    TIMESTAMPTZ     NOT NULL DEFAULT NOW()
 );
 
--- Posts table
+-- Posts table (content metadata only; stats are in post_stats)
 CREATE TABLE IF NOT EXISTS posts (
     id               SERIAL          PRIMARY KEY,
     user_id          INT             NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     title            VARCHAR(200)    NOT NULL,
     content          TEXT            NOT NULL,
-    like_count       INT             NOT NULL DEFAULT 0,
-    comment_count    INT             NOT NULL DEFAULT 0,
-    favorite_count   INT             NOT NULL DEFAULT 0,
-    view_count       INT             NOT NULL DEFAULT 0,
-    expose_count     INT             NOT NULL DEFAULT 0,
-    score            DOUBLE PRECISION NOT NULL DEFAULT 0,
     created_time     TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
     updated_time     TIMESTAMPTZ     NOT NULL DEFAULT NOW()
 );
 
 CREATE INDEX idx_posts_user_id ON posts(user_id);
 CREATE INDEX idx_posts_created_time ON posts(created_time DESC);
-CREATE INDEX idx_posts_score ON posts(score DESC);
 CREATE INDEX idx_posts_user_created_time ON posts(user_id, created_time DESC);
+
+-- Post stats table (1:1 with posts, high-write counters separated for caching)
+CREATE TABLE IF NOT EXISTS post_stats (
+    id               INT              PRIMARY KEY REFERENCES posts(id) ON DELETE CASCADE,
+    like_count       INT              NOT NULL DEFAULT 0,
+    comment_count    INT              NOT NULL DEFAULT 0,
+    favorite_count   INT              NOT NULL DEFAULT 0,
+    view_count       INT              NOT NULL DEFAULT 0,
+    expose_count     INT              NOT NULL DEFAULT 0,
+    score            DOUBLE PRECISION NOT NULL DEFAULT 0,
+    updated_time     TIMESTAMPTZ      NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_post_stats_score ON post_stats(score DESC);
 
 -- Comments table
 CREATE TABLE IF NOT EXISTS comments (

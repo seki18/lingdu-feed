@@ -268,16 +268,16 @@ export default function UserPage({ params }: Props) {
                       </Link>
                       <div className="flex items-center gap-3 text-sm text-gray-500">
                         <span className="inline-flex items-center gap-1">
-                          <img src="/icon/see.svg" alt="" style={{ width: 14, height: 14 }} /> {post.view_count ?? 0}
+                          <img src="/icon/see.svg" alt="" style={{ width: 14, height: 14 }} /> {post.stats?.view_count ?? 0}
                         </span>
                         <span className="inline-flex items-center gap-1">
-                          <img src="/icon/praise_no.svg" alt="" style={{ width: 14, height: 14 }} /> {post.like_count ?? 0}
+                          <img src="/icon/praise_no.svg" alt="" style={{ width: 14, height: 14 }} /> {post.stats?.like_count ?? 0}
                         </span>
                         <span className="inline-flex items-center gap-1">
-                          <img src="/icon/comment.svg" alt="" style={{ width: 14, height: 14 }} /> {post.comment_count ?? 0}
+                          <img src="/icon/comment.svg" alt="" style={{ width: 14, height: 14 }} /> {post.stats?.comment_count ?? 0}
                         </span>
                         <span className="inline-flex items-center gap-1">
-                          <img src="/icon/collect_no.svg" alt="" style={{ width: 14, height: 14 }} /> {post.favorite_count ?? 0}
+                          <img src="/icon/collect_no.svg" alt="" style={{ width: 14, height: 14 }} /> {post.stats?.favorite_count ?? 0}
                         </span>
                         {isOwner && (
                           <div className="flex gap-1 ml-2">

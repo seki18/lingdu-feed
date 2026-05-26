@@ -23,29 +23,31 @@ func CalculateAndUpdateScores(fullUpdate bool) {
 	//
 	// tanh(x) = (e^2x - 1) / (e^2x + 1), smooth saturation to [0, 1)
 	query := `
-		UPDATE posts SET score = ROUND((
-			0.15 * EXP(-EXTRACT(EPOCH FROM (NOW() - created_time)) / 604800.0) +
+		UPDATE post_stats ps SET score = ROUND((
+			0.15 * EXP(-EXTRACT(EPOCH FROM (NOW() - p.created_time)) / 604800.0) +
 			0.35 * (
-				(EXP(2.0 * view_count / 200.0) - 1) /
-				(EXP(2.0 * view_count / 200.0) + 1)
+				(EXP(2.0 * ps.view_count / 200.0) - 1) /
+				(EXP(2.0 * ps.view_count / 200.0) + 1)
 			) +
-			0.20 * COALESCE(view_count::float / NULLIF(expose_count, 0), 0) +
+			0.20 * COALESCE(ps.view_count::float / NULLIF(ps.expose_count, 0), 0) +
 			0.15 * (
-				(EXP(2.0 * like_count / 50.0) - 1) /
-				(EXP(2.0 * like_count / 50.0) + 1)
+				(EXP(2.0 * ps.like_count / 50.0) - 1) /
+				(EXP(2.0 * ps.like_count / 50.0) + 1)
 			) +
 			0.10 * (
-				(EXP(2.0 * comment_count / 30.0) - 1) /
-				(EXP(2.0 * comment_count / 30.0) + 1)
+				(EXP(2.0 * ps.comment_count / 30.0) - 1) /
+				(EXP(2.0 * ps.comment_count / 30.0) + 1)
 			) +
 			0.05 * (
-				(EXP(2.0 * favorite_count / 30.0) - 1) /
-				(EXP(2.0 * favorite_count / 30.0) + 1)
+				(EXP(2.0 * ps.favorite_count / 30.0) - 1) /
+				(EXP(2.0 * ps.favorite_count / 30.0) + 1)
 			)
 		)::numeric, 6)::double precision
+		FROM posts p
+		WHERE ps.id = p.id
 	`
 	if !fullUpdate {
-		query += ` WHERE updated_time >= NOW() - INTERVAL '24 hours'`
+		query += ` AND ps.updated_time >= NOW() - INTERVAL '24 hours'`
 	}
 
 	result, err := common.DB.Exec(query)

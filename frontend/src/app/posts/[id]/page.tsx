@@ -62,8 +62,8 @@ export default function PostDetailPage({ params }: Props) {
           setPost(data.post);
           setHasLiked(data.has_liked ?? false);
           setHasFavorited(data.has_favorited ?? false);
-          setLikeCount(data.post.like_count ?? 0);
-          setViewCount(Math.max(data.post.view_count ?? 0, 1)); // optimistically +1 for this view
+          setLikeCount(data.post.stats?.like_count ?? 0);
+          setViewCount(Math.max(data.post.stats?.view_count ?? 0, 1)); // optimistically +1 for this view
           setInitialComments(data.comments ?? []);
           // Only mark dirty on actual interactions (like/favorite/comment), not on page view
         }

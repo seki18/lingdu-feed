@@ -34,7 +34,6 @@ func CreateLike(c *gin.Context) {
 		common.Error(c, http.StatusInternalServerError, common.ErrInternalParam.WithErr(err))
 		return
 	}
-	_ = repository.IncrLikeCount(postID)
 	common.Success(c, nil)
 }
 
@@ -58,7 +57,6 @@ func DeleteLike(c *gin.Context) {
 		common.Error(c, http.StatusInternalServerError, common.ErrInternalParam.WithErr(err))
 		return
 	}
-	_ = repository.DecrLikeCount(postID)
 	common.Success(c, nil)
 }
 
@@ -82,7 +80,6 @@ func CreateFavorite(c *gin.Context) {
 		common.Error(c, http.StatusInternalServerError, common.ErrInternalParam.WithErr(err))
 		return
 	}
-	_ = repository.IncrFavoriteCount(postID)
 	common.Success(c, nil)
 }
 
@@ -106,7 +103,6 @@ func DeleteFavorite(c *gin.Context) {
 		common.Error(c, http.StatusInternalServerError, common.ErrInternalParam.WithErr(err))
 		return
 	}
-	_ = repository.DecrFavoriteCount(postID)
 	common.Success(c, nil)
 }
 
@@ -130,7 +126,6 @@ func CreateComment(c *gin.Context) {
 		common.Error(c, http.StatusInternalServerError, common.ErrInternalParam.WithErr(err))
 		return
 	}
-	_ = repository.IncrCommentCount(req.PostID)
 	common.Success(c, comment)
 }
 
@@ -155,23 +150,24 @@ func DeleteCommentByID(c *gin.Context) {
 		common.Error(c, http.StatusInternalServerError, common.ErrInternalParam.WithErr(err))
 		return
 	}
-	_ = repository.DecrCommentCount(req.PostID)
 	common.Success(c, nil)
 }
 
-// GetCommentsByPostID handles GET /api/posts/:id/comments (soft auth).
+// GetCommentsByPostID handles GET /api/posts/:id/comments (soft auth) with pagination.
 func GetCommentsByPostID(c *gin.Context) {
 	postID, err := strconv.Atoi(c.Param("id"))
 	if err != nil || postID <= 0 {
 		common.Error(c, http.StatusBadRequest, common.ErrInvalidParam)
 		return
 	}
-	comments, err := repository.GetCommentsByPostID(postID)
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
+	comments, total, err := repository.GetCommentsByPostID(postID, page, pageSize)
 	if err != nil {
 		common.Error(c, http.StatusInternalServerError, common.ErrInternalParam.WithErr(err))
 		return
 	}
-	common.Success(c, comments)
+	common.SuccessPaginated(c, comments, total, page, pageSize)
 }
 
 // GetCommentCountByPostID handles GET /api/posts/:id/comments/count (soft auth).

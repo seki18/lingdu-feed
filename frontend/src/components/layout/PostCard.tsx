@@ -44,16 +44,16 @@ export default function PostCard({ post }: Props) {
           <Icon name="me" /> {post.username || `User ${post.user_id}`}
         </span>
         <span className="inline-flex items-center gap-1">
-          <Icon name="see" /> {post.view_count ?? 0}
+          <Icon name="see" /> {post.stats?.view_count ?? 0}
         </span>
         <span className="inline-flex items-center gap-1">
-          <Icon name="praise_no" /> {post.like_count ?? 0}
+          <Icon name="praise_no" /> {post.stats?.like_count ?? 0}
         </span>
         <span className="inline-flex items-center gap-1">
-          <Icon name="comment" /> {post.comment_count ?? 0}
+          <Icon name="comment" /> {post.stats?.comment_count ?? 0}
         </span>
         <span className="inline-flex items-center gap-1">
-          <Icon name="collect_no" /> {post.favorite_count ?? 0}
+          <Icon name="collect_no" /> {post.stats?.favorite_count ?? 0}
         </span>
       </div>
       <p className="mt-1 text-sm text-gray-400">{new Date(post.created_time).toLocaleString()}</p>

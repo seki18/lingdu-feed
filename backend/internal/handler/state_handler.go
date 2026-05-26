@@ -4,9 +4,9 @@ import (
 	"log"
 	"net/http"
 
+	"github.com/seki18/lingdu-feed/internal/cache"
 	"github.com/seki18/lingdu-feed/internal/common"
 	"github.com/seki18/lingdu-feed/internal/model"
-	"github.com/seki18/lingdu-feed/internal/repository"
 	"github.com/seki18/lingdu-feed/internal/service"
 
 	"github.com/gin-gonic/gin"
@@ -37,14 +37,18 @@ func UpsertState(c *gin.Context) {
 		return
 	}
 
-	// First time a post becomes exposed → increment expose_count
+	// First time a post becomes exposed → increment expose_count (via service → cache)
 	if req.Status >= model.StateExposed && prevStatus < model.StateExposed {
-		_ = repository.IncrExposeCount(req.PostID)
+		_ = service.IncrExposeCount(req.PostID)
 	}
-	// First time a post is clicked → increment view_count
+	// First time a post is clicked → increment view_count (via service → cache)
 	if req.Status >= model.StateClicked && prevStatus < model.StateClicked {
-		_ = repository.IncrViewCount(req.PostID)
+		_ = service.IncrViewCount(req.PostID)
 	}
+
+	// Mark consumed in Redis SET cache (best-effort)
+	_ = cache.MarkConsumed(req.UserID, []int{req.PostID})
+
 	common.Success(c, nil)
 }
 
@@ -59,6 +63,7 @@ func BatchUpsertState(c *gin.Context) {
 	userID, _ := c.Get("user_id")
 	uid := userID.(int)
 
+	consumedPostIDs := make([]int, 0, len(reqs))
 	for i := range reqs {
 		reqs[i].UserID = uid
 		prevStatus := model.StateUnknown
@@ -68,14 +73,22 @@ func BatchUpsertState(c *gin.Context) {
 		if err := service.UpsertState(reqs[i]); err != nil {
 			log.Printf("[BatchUpsertState] Service error at index %d: %v", i, err)
 		}
-		// First time a post becomes exposed → increment expose_count
+		// First time a post becomes exposed → increment expose_count (via service → cache)
 		if reqs[i].Status >= model.StateExposed && prevStatus < model.StateExposed {
-			_ = repository.IncrExposeCount(reqs[i].PostID)
+			_ = service.IncrExposeCount(reqs[i].PostID)
 		}
-		// First time a post is clicked → increment view_count
+		// First time a post is clicked → increment view_count (via service → cache)
 		if reqs[i].Status >= model.StateClicked && prevStatus < model.StateClicked {
-			_ = repository.IncrViewCount(reqs[i].PostID)
+			_ = service.IncrViewCount(reqs[i].PostID)
+		}
+		// Track consumed posts for Redis SET cache
+		if reqs[i].Status > model.StateDelivered {
+			consumedPostIDs = append(consumedPostIDs, reqs[i].PostID)
 		}
 	}
+
+	// Mark consumed in Redis SET cache (best-effort, batch)
+	_ = cache.MarkConsumed(uid, consumedPostIDs)
+
 	common.Success(c, nil)
 }

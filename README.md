@@ -21,7 +21,7 @@ This system is designed as a **feed-based recommendation backend**, focusing on:
 | **Posts** | CRUD with title + content, owner-only edit/delete |
 | **Comments** | Nested replies, cascade delete |
 | **Social** | Like/unlike, favorite/unfavorite, follow/unfollow |
-| **Cache** | Redis: ranking ZSET (top 20 by score), candidate ZSET (latest 20), follow SET (24h TTL); cache-first with DB fallback |
+| **Cache** | Redis: ranking ZSET, candidate ZSET, follow SET; feeditem HASH, content STRING, stats HASH, state SET with sliding TTL; all cache-first with DB fallback |
 | **Feeds** | Hybrid feed system (recommend + recent + following) with cursor-based pagination and state-based deduplication |
 | **Tracking** | State pipeline (delivered → exposed → clicked) for feed deduplication and ranking signals |
 | **API** | Unified JSON envelope `{ code, message, data }` with pagination |
@@ -248,16 +248,21 @@ each tick. This avoids expensive per-request computation.
 
 ### Cache Architecture
 
-Three Redis caches accelerate the feed pipeline:
+Six Redis caches accelerate the system across different data types:
 
-| Cache | Structure | Contents | TTL / Cap |
-|---|---|---|---|
-| `ranking` | ZSET | Top 20 posts by score | refreshed on scheduler tick |
-| `candidate` | ZSET | Latest 20 posts by `created_time` | capped at 20, written on post creation |
-| `follow:<uid>` | STRING (JSON) | User's following ID list | 24 hours, invalidated on follow/unfollow |
+| Cache | Structure | Contents | TTL | Write Strategy |
+|---|---|---|---|---|
+| `ranking` | ZSET | Top 20 posts by score | refreshed on scheduler tick | scheduler → DB → Redis |
+| `candidate` | ZSET | Latest 20 posts by `created_time` | capped at 20 | post creation → SADD |
+| `follow:<uid>` | SET (JSON) | User's following ID list | 24 hours | follow/unfollow → invalidate |
+| `stats:{id}` | HASH | like/comment/favorite/view/expose count + score | 1 hour | HINCRBY on mutation, 30s batch sync to DB |
+| `feeditem:{id}` | HASH | id, user_id, username, title, created_time | 1 hour | post create/update → HSET, post delete → DEL |
+| `content:{id}` | STRING | post content text | 1 hour | post create/update → SETEX, post delete → DEL |
+| `consumed:{uid}` | SET | post IDs the user has seen (>delivered) | 30 min (sliding) | BatchUpsertState → SADD + EXPIRE |
 
-All reads are cache-first with DB fallback. The ranking and candidate caches
-support cursor-based filtering so cached data is usable beyond the first page.
+All caches use cache-first reads with DB fallback. The `stats` cache uses a write-back pattern (HINCRBY in Redis, batch sync to DB every 30s). The `consumed` state cache uses sliding TTL — active users keep their cache alive; inactive users' cache expires after 30 minutes.
+
+`FeedItem` and `content` caches reduce feed queries from hitting the database. `stats` cache absorbs high-frequency like/comment/view counters. `consumed` cache replaces per-request DB queries in `FilterPostIDs` with in-memory SET difference operations.
 
 ### Feed Composition
 
@@ -291,7 +296,6 @@ previously-seen posts to fill remaining slots.
 
 ### Optimizations
 
-- [ ] **Stats Table Split** — Extract like_count, comment_count, favorite_count, view_count from `posts` into a separate `post_stats` table; introduce Redis caching for hot post stats to reduce DB write pressure on every like/comment/favorite toggle
 - [ ] **Cloud Migration** — Migrate static assets to cloud object storage (S3/OSS) and deploy services to a cloud platform
 
 ---

@@ -57,7 +57,7 @@ func RefreshRanking() error {
 		ID    int     `db:"id"`
 		Score float64 `db:"score"`
 	}
-	if err := common.DB.Select(&rows, `SELECT id, score FROM posts ORDER BY score DESC LIMIT 20`); err != nil {
+	if err := common.DB.Select(&rows, `SELECT id, score FROM post_stats ORDER BY score DESC LIMIT 20`); err != nil {
 		log.Printf("[RankingCache] DB query failed: %v", err)
 		return err
 	}

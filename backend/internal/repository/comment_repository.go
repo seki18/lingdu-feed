@@ -52,10 +52,16 @@ func DeleteCommentByID(comment model.Comment) error {
 	return nil
 }
 
-// GetCommentsByPostID retrieves all comments for a given post, ordered by creation time.
-func GetCommentsByPostID(postID int) ([]model.Comment, error) {
-	var comments []model.Comment
+// GetCommentsByPostID retrieves comments for a given post with pagination.
+// page=1 means first page; comments are ordered by creation time ascending.
+func GetCommentsByPostID(postID, page, pageSize int) ([]model.Comment, int, error) {
+	var total int
+	if err := common.DB.Get(&total, `SELECT COUNT(1) FROM comments WHERE post_id = $1`, postID); err != nil {
+		return nil, 0, err
+	}
 
+	offset := (page - 1) * pageSize
+	var comments []model.Comment
 	err := common.DB.Select(&comments, `
 		SELECT c.id, c.post_id, c.user_id, u.username, c.reply_id,
 		       ru.username AS reply_username, c.content, c.created_time
@@ -65,7 +71,8 @@ func GetCommentsByPostID(postID int) ([]model.Comment, error) {
 		LEFT JOIN users ru ON ru.id = pc.user_id
 		WHERE c.post_id = $1
 		ORDER BY c.created_time ASC
-	`, postID)
+		LIMIT $2 OFFSET $3
+	`, postID, pageSize, offset)
 
-	return comments, err
+	return comments, total, err
 }

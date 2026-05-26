@@ -134,10 +134,10 @@ func BatchGetPostStats(c *gin.Context) {
 		common.Success(c, []model.FeedItem{})
 		return
 	}
-	posts, err := repository.GetPostStatsByIDs(req.PostIDs)
+	statsList, err := repository.GetStatsByPostIDs(req.PostIDs)
 	if err != nil {
 		common.Error(c, http.StatusInternalServerError, common.ErrInternalParam.WithErr(err))
 		return
 	}
-	common.Success(c, posts)
+	common.Success(c, statsList)
 }

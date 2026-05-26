@@ -1,6 +1,7 @@
 package service
 
 import (
+	"github.com/seki18/lingdu-feed/internal/cache"
 	"github.com/seki18/lingdu-feed/internal/model"
 	"github.com/seki18/lingdu-feed/internal/repository"
 )
@@ -37,4 +38,14 @@ func BatchUpsertState(reqs []model.StateRequest, userID int) error {
 // GetViewCountByPostID returns the total number of views (clicks) for a given post.
 func GetViewCountByPostID(postID int) (int, error) {
 	return repository.GetViewCountByPostID(postID)
+}
+
+// IncrExposeCount increments the expose_count for a post via cache.
+func IncrExposeCount(postID int) error {
+	return cache.IncrExposeCount(postID)
+}
+
+// IncrViewCount increments the view_count for a post via cache.
+func IncrViewCount(postID int) error {
+	return cache.IncrViewCount(postID)
 }

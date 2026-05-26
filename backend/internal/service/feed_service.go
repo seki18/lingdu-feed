@@ -6,6 +6,7 @@ import (
 	"github.com/seki18/lingdu-feed/internal/cache"
 	"github.com/seki18/lingdu-feed/internal/model"
 	"github.com/seki18/lingdu-feed/internal/repository"
+	post_stats_repository "github.com/seki18/lingdu-feed/internal/repository"
 	"github.com/seki18/lingdu-feed/internal/utils"
 )
 
@@ -64,7 +65,7 @@ func GetRecommendPosts(userID int, requestType string, cursorID int) ([]model.Fe
 		log.Printf("[GetRecommendPosts] recommend filterByCursor cursor=%d before=%d after=%d", cursorID, before, len(recommendIDs))
 	}
 	if len(recommendIDs) == 0 {
-		recommendIDs, _ = repository.GetRecommendPostIDs(count*3, cursorID)
+		recommendIDs, _ = post_stats_repository.GetRecommendPostIDs(count*3, cursorID)
 		log.Printf("[GetRecommendPosts] recommend=HIT(db) count=%d cursor=%d", len(recommendIDs), cursorID)
 	}
 
@@ -85,7 +86,7 @@ func GetRecommendPosts(userID int, requestType string, cursorID int) ([]model.Fe
 		if len(result) > 0 {
 			degradeCursorID = result[len(result)-1]
 		}
-		degradedIDs, _ := repository.GetRecommendPostIDs(remaining*3, degradeCursorID)
+		degradedIDs, _ := post_stats_repository.GetRecommendPostIDs(remaining*3, degradeCursorID)
 		if userID != -1 {
 			degradedIDs, _ = utils.FilterPostIDs(degradedIDs, userID, false)
 		}
@@ -93,10 +94,11 @@ func GetRecommendPosts(userID int, requestType string, cursorID int) ([]model.Fe
 		log.Printf("[GetRecommendPosts] degrade=%d remaining=%d", len(degradedIDs), remaining)
 	}
 
-	posts, err := repository.GetPostsByIDs(result)
+	posts, err := cache.GetFeedItemsBatch(result)
 	if err != nil {
 		return nil, 0, err
 	}
+	attachStatsToFeedItems(posts)
 
 	newCursorID := 0
 	if len(posts) > 0 {
@@ -118,10 +120,11 @@ func GetFollowingPosts(userID int, cursorID int) ([]model.FeedItem, int, error) 
 	}
 	ids, _ = utils.FilterPostIDs(ids, userID, true)
 	ids = take(ids, count)
-	posts, err := repository.GetPostsByIDs(ids)
+	posts, err := cache.GetFeedItemsBatch(ids)
 	if err != nil {
 		return nil, 0, err
 	}
+	attachStatsToFeedItems(posts)
 	newCursorID := 0
 	if len(posts) > 0 {
 		newCursorID = posts[len(posts)-1].ID
@@ -129,8 +132,6 @@ func GetFollowingPosts(userID int, cursorID int) ([]model.FeedItem, int, error) 
 	log.Printf("[GetFollowingPosts] cursor=%d ids=%v posts=%d count=%d", cursorID, ids, len(posts), count)
 	return posts, newCursorID, nil
 }
-
-// ── helpers ──
 
 // assembleFeedIDs merges three ID slices into a single deduplicated result.
 // recommend IDs are placed first, followed by interleaved recent + following IDs.
@@ -181,10 +182,11 @@ func GetHistoryPosts(userID, page, pageSize int) ([]model.FeedItem, int, error) 
 	if err != nil {
 		return nil, 0, err
 	}
-	posts, err := repository.GetPostsByIDs(ids)
+	posts, err := cache.GetFeedItemsBatch(ids)
 	if err != nil {
 		return nil, 0, err
 	}
+	attachStatsToFeedItems(posts)
 	return posts, total, nil
 }
 
@@ -194,16 +196,22 @@ func GetFavoriteFeed(userID, page, pageSize int) ([]model.FeedItem, int, error) 
 	if err != nil {
 		return nil, 0, err
 	}
-	posts, err := repository.GetPostsByIDs(ids)
+	posts, err := cache.GetFeedItemsBatch(ids)
 	if err != nil {
 		return nil, 0, err
 	}
+	attachStatsToFeedItems(posts)
 	return posts, total, nil
 }
 
 // GetAuthorPosts returns posts authored by the given user with pagination.
 func GetAuthorPosts(userID, page, pageSize int) ([]model.FeedItem, int, error) {
-	return repository.GetPostsByUserID(userID, page, pageSize)
+	posts, total, err := repository.GetPostsByUserID(userID, page, pageSize)
+	if err != nil {
+		return nil, 0, err
+	}
+	attachStatsToFeedItems(posts)
+	return posts, total, nil
 }
 
 // GetAuthorPage returns author profile and paginated authored posts in one response.
@@ -224,8 +232,17 @@ func GetAuthorPage(userID, currentUserID, page, pageSize int) (model.User, []mod
 	if err != nil {
 		return model.User{}, nil, 0, err
 	}
-
+	attachStatsToFeedItems(posts)
 	return user, posts, total, nil
+}
+
+func attachStatsToFeedItems(items []model.FeedItem) {
+	for i := range items {
+		stats, err := cache.GetStats(items[i].ID)
+		if err == nil && stats != nil {
+			items[i].Stats = stats
+		}
+	}
 }
 
 func feedCount(requestType string) int {
