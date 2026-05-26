@@ -82,7 +82,7 @@ lingdu-feed/
 │       ├── handler/       # HTTP handlers → feed, post, social, follow, state, user
 │       ├── middleware/    # AuthMiddleware, SoftAuthMiddleware
 │       ├── model/         # DB models + request/response DTOs
-│       ├── cache/         # Redis business logic (ranking, candidate, follow)
+│       ├── cache/         # Redis business logic (ranking, candidate, follow, stats, feeditem, content, state)
 │       ├── repository/    # Raw SQL (sqlx), one file per table
 │       ├── router/        # Route groups & middleware binding
 │       ├── scheduler/     # Background tasks (score recalculation)
