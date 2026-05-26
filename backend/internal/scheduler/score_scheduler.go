@@ -11,7 +11,8 @@ import (
 // CalculateAndUpdateScores updates the score column for posts.
 // Score is always in [0, 1], computed from recency, CTR, and engagement rates.
 // When fullUpdate is true, updates ALL posts (used at startup).
-// When fullUpdate is false, only updates posts whose updated_time is within the last 24 hours.
+// When fullUpdate is false, updates posts whose stats changed within 24h
+// OR whose age is within the recency decay window (21 days, ~3 half-lives).
 func CalculateAndUpdateScores(fullUpdate bool) {
 	// Score formula (each term ∈ [0, 1], weights sum to 1.0):
 	//   0.15 × recency_decay                            — EXP decay, 7-day half-life
@@ -47,7 +48,10 @@ func CalculateAndUpdateScores(fullUpdate bool) {
 		WHERE ps.id = p.id
 	`
 	if !fullUpdate {
-		query += ` AND ps.updated_time >= NOW() - INTERVAL '24 hours'`
+		query += ` AND (
+			ps.updated_time >= NOW() - INTERVAL '24 hours'
+			OR p.created_time >= NOW() - INTERVAL '21 days'
+		)`
 	}
 
 	result, err := common.DB.Exec(query)

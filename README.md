@@ -246,8 +246,10 @@ A normalized score ∈ [0, 1] is recalculated every minute:
 | Favorites | 5% | `tanh(favorites / 30)` | Save/bookmark rate |
 
 The scoring is decoupled from query time: on startup, a full-table update runs;
-subsequently, only posts modified within the last 24 hours are recalculated
-each tick. This avoids expensive per-request computation.
+subsequently, posts whose stats changed within 24 hours or whose age is within
+21 days (~3 recency half-lives) are recalculated each tick. This ensures
+the recency decay term naturally degrades older content without requiring
+new interactions.
 
 ### Redis Architecture
 
