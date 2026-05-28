@@ -118,6 +118,39 @@ func GetPostDetail(c *gin.Context) {
 	common.Success(c, detail)
 }
 
+// AddPostImages handles POST /posts/:id/images (auth required).
+// Accepts { images: ["url1", "url2", ...] }, inserts into post_images table.
+func AddPostImages(c *gin.Context) {
+	postID, err := strconv.Atoi(c.Param("id"))
+	if err != nil || postID <= 0 {
+		common.Error(c, http.StatusBadRequest, common.ErrInvalidParam)
+		return
+	}
+
+	var req model.AddPostImagesRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		common.Error(c, http.StatusBadRequest, common.ErrInvalidParam.WithErr(err))
+		return
+	}
+
+	if len(req.Images) == 0 {
+		common.Error(c, http.StatusBadRequest, common.ErrInvalidParam)
+		return
+	}
+	if len(req.Images) > 9 {
+		common.Error(c, http.StatusBadRequest, common.ErrInvalidParam)
+		return
+	}
+
+	images, err := repository.InsertPostImages(postID, req.Images)
+	if err != nil {
+		common.Error(c, http.StatusInternalServerError, common.ErrInternalParam.WithErr(err))
+		return
+	}
+
+	common.Success(c, gin.H{"images": images})
+}
+
 // BatchGetPostStats handles POST /posts/batch-stats (soft auth).
 // Accepts { post_ids: [1, 2, 3] } and returns lightweight post summaries
 // in the same order. Used by the feed page to update cached post stats

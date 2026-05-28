@@ -35,28 +35,38 @@ export default function PostCard({ post }: Props) {
 
   return (
     <div className="mb-4 cursor-pointer rounded border p-4 shadow-sm transition hover:bg-gray-50" onClick={handleClick}>
-      <h2 className="text-lg font-bold">{post.title}</h2>
-      <div className="mt-2 flex items-center gap-4 text-sm text-gray-500">
-        <span
-          onClick={handleUserClick}
-          className="inline-flex items-center gap-1 text-gray-500 hover:text-blue-600 hover:underline cursor-pointer"
-        >
-          <Icon name="me" /> {post.username || `User ${post.user_id}`}
-        </span>
-        <span className="inline-flex items-center gap-1">
-          <Icon name="see" /> {post.stats?.view_count ?? 0}
-        </span>
-        <span className="inline-flex items-center gap-1">
-          <Icon name="praise_no" /> {post.stats?.like_count ?? 0}
-        </span>
-        <span className="inline-flex items-center gap-1">
-          <Icon name="comment" /> {post.stats?.comment_count ?? 0}
-        </span>
-        <span className="inline-flex items-center gap-1">
-          <Icon name="collect_no" /> {post.stats?.favorite_count ?? 0}
-        </span>
+      <div className="flex gap-4">
+        {/* Thumbnail */}
+        {post.first_image_url && (
+          <div className="flex-shrink-0 w-20 h-20 rounded overflow-hidden">
+            <img src={post.first_image_url} alt="" className="w-full h-full object-cover" />
+          </div>
+        )}
+        <div className="flex-1 min-w-0">
+          <h2 className="text-lg font-bold">{post.title}</h2>
+          <div className="mt-2 flex items-center gap-4 text-sm text-gray-500">
+            <span
+              onClick={handleUserClick}
+              className="inline-flex items-center gap-1 text-gray-500 hover:text-blue-600 hover:underline cursor-pointer"
+            >
+              <Icon name="me" /> {post.username || `User ${post.user_id}`}
+            </span>
+            <span className="inline-flex items-center gap-1">
+              <Icon name="see" /> {post.stats?.view_count ?? 0}
+            </span>
+            <span className="inline-flex items-center gap-1">
+              <Icon name="praise_no" /> {post.stats?.like_count ?? 0}
+            </span>
+            <span className="inline-flex items-center gap-1">
+              <Icon name="comment" /> {post.stats?.comment_count ?? 0}
+            </span>
+            <span className="inline-flex items-center gap-1">
+              <Icon name="collect_no" /> {post.stats?.favorite_count ?? 0}
+            </span>
+          </div>
+          <p className="mt-1 text-sm text-gray-400">{new Date(post.created_time).toLocaleString()}</p>
+        </div>
       </div>
-      <p className="mt-1 text-sm text-gray-400">{new Date(post.created_time).toLocaleString()}</p>
     </div>
   );
 }

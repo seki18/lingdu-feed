@@ -1,0 +1,2 @@
+# Sensitive configuration (contains passwords and API keys)
+config.yaml

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import PostCard from "@/components/layout/PostCard";
-import { apiFetch, trackState, consumeDirtyPostIds } from "@/lib/api";
+import { apiFetch, trackState, consumeDirtyPostIds, uploadImage, addPostImages } from "@/lib/api";
 import { getUser } from "@/lib/auth";
 import { useToast } from "@/components/ui/ToastContext";
 import Loading from "@/components/ui/Loading";
@@ -30,6 +30,12 @@ export default function HomePage() {
   const [creating, setCreating] = useState(false);
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
+  // ── Image upload state ──
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [previews, setPreviews] = useState<string[]>([]);
+  const [uploadedUrls, setUploadedUrls] = useState<string[]>([]);
+  const [uploadingCount, setUploadingCount] = useState(0); // >0 = uploading, -1 = failed
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [user, setUser] = useState<User | null>(null);
   const { addToast } = useToast();
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -213,6 +219,7 @@ export default function HomePage() {
     }
     setCreating(true);
     try {
+      // 1. Create post first to get postId
       const response = await apiFetch("/api/posts", {
         method: "POST",
         body: JSON.stringify({ title: title.trim(), content: content.trim() }),
@@ -222,19 +229,69 @@ export default function HomePage() {
         return;
       }
       const newPost = response.data;
-      setPosts((current) => [{
+
+      // 2. Upload images one by one with postId
+      const urls: string[] = [];
+      if (selectedFiles.length > 0) {
+        for (let i = 0; i < selectedFiles.length; i++) {
+          setUploadingCount(i + 1);
+          try {
+            const url = await uploadImage(newPost.id, selectedFiles[i]);
+            urls.push(url);
+          } catch {
+            setUploadingCount(-1);
+            addToast(`Failed to upload image ${i+1}/${selectedFiles.length}.`, { type: "error", title: "Upload failed" });
+            return;
+          }
+        }
+        // 3. Associate images with post
+        if (urls.length > 0) {
+          await addPostImages(newPost.id, urls);
+        }
+      }
+
+      const firstUrl = urls.length > 0 ? urls[0] : null;
+      const newPostSummary: PostSummary = {
         id: newPost.id, user_id: newPost.user_id, username: user.username,
-        title: newPost.title, created_time: newPost.created_time,
+        title: newPost.title, first_image_url: firstUrl, created_time: newPost.created_time,
         stats: { like_count: 0, comment_count: 0, favorite_count: 0, view_count: 0 },
-      }, ...current]);
+      };
+      setPosts((current) => [newPostSummary, ...current]);
+      postsRef.current = [newPostSummary, ...postsRef.current];
+      // Update module cache instead of invalidating it
+      if (feedCache) {
+        feedCache.posts = [newPostSummary, ...feedCache.posts];
+        feedCache.timestamp = Date.now();
+      }
       setTitle(""); setContent("");
+      setSelectedFiles([]); setPreviews([]); setUploadedUrls([]); setUploadingCount(0);
       setShowCreateModal(false);
-      feedCache = null; // invalidate cache so refresh fetches new post
       addToast("Post created successfully!", { type: "success", title: "Success" });
     } catch (error) {
       addToast("Unable to create post.", { type: "error", title: "Error" });
       console.error(error);
-    } finally { setCreating(false); }
+    } finally { setCreating(false); setUploadingCount(0); }
+  };
+
+  // --- Image selection (append mode — each select adds to existing) ---
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const incoming = Array.from(e.target.files || []);
+    const combined = [...selectedFiles, ...incoming];
+    if (combined.length > 9) {
+      addToast(`Maximum 9 images (you already have ${selectedFiles.length}).`, { type: "warning", title: "Too many images" });
+      return;
+    }
+    for (const f of incoming) {
+      if (f.size > 10 * 1024 * 1024) {
+        addToast(`"${f.name}" exceeds 10 MB limit.`, { type: "warning", title: "File too large" });
+        return;
+      }
+    }
+    setSelectedFiles(combined);
+    setPreviews(combined.map(f => URL.createObjectURL(f)));
+    setUploadedUrls([]);
+    // Reset input value so re-selecting the same file works
+    if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
   // --- infinite scroll observer ---
@@ -355,17 +412,65 @@ export default function HomePage() {
                 placeholder="Content" rows={5} value={content}
                 onChange={(e) => setContent(e.target.value)} disabled={creating}
               />
+              {/* ── Image upload ── */}
+              <div>
+                <button
+                  type="button"
+                  disabled={creating}
+                  onClick={() => fileInputRef.current?.click()}
+                  className="inline-flex items-center gap-1 rounded border border-gray-300 px-3 py-2 text-sm text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+                >
+                  <img src="/icon/picture.svg" alt="upload" className="w-4 h-4" />
+                  Add Images {selectedFiles.length > 0 && `(${selectedFiles.length}/9)`}
+                </button>
+                <input
+                  ref={fileInputRef}
+                  type="file" multiple accept="image/*"
+                  className="hidden"
+                  onChange={handleFileSelect}
+                  disabled={creating}
+                />
+              </div>
+              {/* Image previews */}
+              {previews.length > 0 && (
+                <div className="grid grid-cols-3 gap-2">
+                  {previews.map((url, i) => (
+                    <div key={i} className="relative aspect-square rounded border border-gray-200 overflow-hidden">
+                      <img src={url} alt={`preview ${i+1}`} className="w-full h-full object-cover" />
+                      {uploadedUrls.length > i && (
+                        <span className="absolute top-1 right-1 bg-green-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs">✓</span>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedFiles(prev => prev.filter((_, j) => j !== i));
+                          setPreviews(prev => prev.filter((_, j) => j !== i));
+                        }}
+                        disabled={creating}
+                        className="absolute top-1 left-1 bg-black/50 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs hover:bg-black/70"
+                      >×</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {/* Upload progress */}
+              {uploadingCount > 0 && (
+                <div className="text-sm text-gray-500">Uploading images: {uploadingCount}/{selectedFiles.length}</div>
+              )}
+              {uploadingCount === -1 && (
+                <div className="text-sm text-red-500">Image upload failed. Please try again.</div>
+              )}
             </div>
             <div className="flex justify-end gap-2 mt-4">
               <button
                 type="button"
-                onClick={() => setShowCreateModal(false)}
+                onClick={() => { setShowCreateModal(false); setSelectedFiles([]); setPreviews([]); }}
                 className="rounded border px-4 py-2 text-sm text-gray-600 hover:bg-gray-50"
               >Cancel</button>
               <button
                 type="button" disabled={creating} onClick={handleCreatePost}
                 className="rounded bg-black px-4 py-2 text-sm text-white hover:bg-gray-900 disabled:opacity-50"
-              >{creating ? "Posting..." : "Publish"}</button>
+              >{creating ? (uploadingCount > 0 ? `Uploading…` : "Posting...") : "Publish"}</button>
             </div>
           </div>
         </div>

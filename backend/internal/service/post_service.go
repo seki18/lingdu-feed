@@ -91,15 +91,16 @@ func DeletePostByID(id int64) error {
 }
 
 // GetPostDetail returns the full detail for a post, including interaction
-// status and comments, all fetched concurrently.
+// status, images, and comments, all fetched concurrently.
 func GetPostDetail(id, userID int) (*model.PostDetailResponse, error) {
 	var (
 		post      model.Post
 		liked     bool
 		favorited bool
+		images    []model.PostImage
 		comments  []model.Comment
 	)
-	errCh := make(chan error, 5)
+	errCh := make(chan error, 6)
 
 	go func() {
 		var e error
@@ -126,6 +127,11 @@ func GetPostDetail(id, userID int) (*model.PostDetailResponse, error) {
 		errCh <- e
 	}()
 	go func() {
+		var e error
+		images, e = repository.GetImagesByPostID(id)
+		errCh <- e
+	}()
+	go func() {
 		stats, e := cache.GetStats(id)
 		if e == nil && stats != nil {
 			post.Stats = stats
@@ -133,7 +139,7 @@ func GetPostDetail(id, userID int) (*model.PostDetailResponse, error) {
 		errCh <- e
 	}()
 
-	for i := 0; i < 5; i++ {
+	for i := 0; i < 6; i++ {
 		if err := <-errCh; err != nil {
 			return nil, err
 		}
@@ -143,6 +149,7 @@ func GetPostDetail(id, userID int) (*model.PostDetailResponse, error) {
 		Post:         post,
 		HasLiked:     liked,
 		HasFavorited: favorited,
+		Images:       images,
 		Comments:     comments,
 	}, nil
 }

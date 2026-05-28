@@ -63,6 +63,7 @@ func RegisterRoutes(r *gin.Engine) {
 		{
 			put.PUT("", handler.UpdatePost)
 			put.DELETE("", handler.DeletePostByID)
+			put.POST("/images", handler.AddPostImages)
 		}
 	}
 
@@ -95,6 +96,9 @@ func RegisterRoutes(r *gin.Engine) {
 		followAuth.POST("/:id/follow", handler.CreateFollow)
 		followAuth.DELETE("/:id/follow", handler.DeleteFollow)
 	}
+
+	// ── Upload ──
+	api.POST("/upload", middleware.AuthMiddleware(), handler.UploadImage)
 
 	// ── State ──
 	stateAuth := api.Group("/state")

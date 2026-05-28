@@ -100,3 +100,14 @@ CREATE TABLE IF NOT EXISTS states (
 );
 
 CREATE INDEX idx_states_user_status ON states(user_id, status);
+
+-- Post images table (supports multiple images per post with ordering)
+CREATE TABLE post_images (
+    id BIGSERIAL PRIMARY KEY,
+    post_id BIGINT NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
+    image_url TEXT NOT NULL,
+    sort_order INT DEFAULT 0,
+    created_time TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX idx_post_images_post_id ON post_images(post_id);

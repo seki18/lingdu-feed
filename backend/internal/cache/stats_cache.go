@@ -256,11 +256,33 @@ func SyncAllToDB() {
 	}
 
 	if len(stats) > 0 {
-		if err := repository.BatchUpsertStats(stats); err != nil {
-			log.Printf("[StatsCache] Sync upsert error: %v", err)
+		// Filter out stats for posts that don't exist (stale/orphan cache entries)
+		validIDs, err := repository.GetExistingPostIDsByStats(extractIDs(stats))
+		if err != nil {
+			log.Printf("[StatsCache] Sync validate error: %v", err)
 			return
 		}
-		log.Printf("[StatsCache] Synced %d keys to DB in %v", len(stats), time.Since(start))
+		validSet := make(map[int]bool, len(validIDs))
+		for _, id := range validIDs {
+			validSet[id] = true
+		}
+		filtered := make([]model.PostStats, 0, len(stats))
+		for _, s := range stats {
+			if validSet[s.ID] {
+				filtered = append(filtered, s)
+			} else {
+				// Clean up orphan Redis key
+				common.Redis.Del(ctx, statsKey(s.ID))
+			}
+		}
+
+		if len(filtered) > 0 {
+			if err := repository.BatchUpsertStats(filtered); err != nil {
+				log.Printf("[StatsCache] Sync upsert error: %v", err)
+				return
+			}
+			log.Printf("[StatsCache] Synced %d keys to DB in %v", len(filtered), time.Since(start))
+		}
 	}
 }
 
@@ -286,4 +308,12 @@ func parseStats(id int, fields map[string]string) *model.PostStats {
 		s.Score = v
 	}
 	return s
+}
+
+func extractIDs(stats []model.PostStats) []int {
+	ids := make([]int, len(stats))
+	for i, s := range stats {
+		ids[i] = s.ID
+	}
+	return ids
 }

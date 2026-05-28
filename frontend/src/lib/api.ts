@@ -228,6 +228,30 @@ export async function createPost(title: string, content: string): Promise<ApiRes
   });
 }
 
+// addPostImages associates uploaded image URLs with a post.
+export async function addPostImages(postId: number, images: string[]): Promise<ApiResponse> {
+  return apiFetch(`/api/posts/${postId}/images`, {
+    method: "POST",
+    body: JSON.stringify({ images }),
+  });
+}
+
+// uploadImage uploads a single file to S3 via the backend.
+export async function uploadImage(postId: number, file: File): Promise<string> {
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("post_id", String(postId));
+  const token = getToken();
+  const res = await fetch(`${BASE_URL}/api/upload`, {
+    method: "POST",
+    body: formData,
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  const data: ApiResponse = await res.json();
+  if (data.code !== 200) throw new Error(data.message || "Upload failed");
+  return data.data.url ?? data.data;
+}
+
 // ── Auth API helpers ──
 
 export async function login(email: string, password: string): Promise<ApiResponse> {

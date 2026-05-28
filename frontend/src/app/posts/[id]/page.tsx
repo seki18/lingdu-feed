@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useState, use } from "react";
 import { apiFetch, markPostDirty, likePost, unlikePost, favoritePost, unfavoritePost } from "@/lib/api";
 import { useToast } from "@/components/ui/ToastContext";
-import { Post, PostDetailResponse } from "@/types/post";
+import { Post, PostDetailResponse, PostImage } from "@/types/post";
 import { CommentItem } from "@/types/comment";
 import { getUser } from "@/lib/auth";
 import { User } from "@/types/user";
@@ -32,6 +32,7 @@ export default function PostDetailPage({ params }: Props) {
   const [hasFavorited, setHasFavorited] = useState(false);
   const [favoriting, setFavoriting] = useState(false);
   const [viewCount, setViewCount] = useState(0);
+  const [images, setImages] = useState<PostImage[]>([]);
   const [initialComments, setInitialComments] = useState<CommentItem[] | null>(null);
 
   useEffect(() => {
@@ -64,6 +65,7 @@ export default function PostDetailPage({ params }: Props) {
           setHasFavorited(data.has_favorited ?? false);
           setLikeCount(data.post.stats?.like_count ?? 0);
           setViewCount(Math.max(data.post.stats?.view_count ?? 0, 1)); // optimistically +1 for this view
+          setImages(data.images ?? []);
           setInitialComments(data.comments ?? []);
           // Only mark dirty on actual interactions (like/favorite/comment), not on page view
         }
@@ -226,6 +228,16 @@ export default function PostDetailPage({ params }: Props) {
             </div>
           </div>
           <div className="whitespace-pre-line text-gray-700">{post.content}</div>
+          {/* ── Post images ── */}
+          {images.length > 0 && (
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+              {images.map((img) => (
+                <a key={img.id} href={img.image_url} target="_blank" rel="noopener noreferrer">
+                  <img src={img.image_url} alt={`Image ${img.sort_order + 1}`} className="w-full h-48 object-cover rounded border" />
+                </a>
+              ))}
+            </div>
+          )}
         </article>
       ) : (
         <div className="rounded border border-gray-200 bg-gray-50 p-6 text-gray-500">

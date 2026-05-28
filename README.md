@@ -23,6 +23,7 @@ This system is designed as a **feed-based recommendation backend**, focusing on:
 | **Social** | Like/unlike, favorite/unfavorite, follow/unfollow |
 | **Cache** | Redis: ranking ZSET, candidate ZSET, follow SET, feeditem HASH, content STRING, stats HASH, consumed state SET; cache-first, write-back, and write-through patterns |
 | **Feeds** | Hybrid feed system (recommend + recent + following) with cursor-based pagination and state-based deduplication |
+| **Images** | Multi-image upload (up to 9 per post), S3 storage, automatic compression (max 1920px, JPEG Q=85), feed thumbnails |
 | **Tracking** | State pipeline (delivered → exposed → clicked) for feed deduplication and ranking signals |
 | **API** | Unified JSON envelope `{ code, message, data }` with pagination |
 
@@ -35,6 +36,7 @@ This system is designed as a **feed-based recommendation backend**, focusing on:
 | Backend | Go 1.26 + Gin v1.12 + sqlx v1.4 + PostgreSQL 16 |
 | Frontend | Next.js 16 + React 19 + TypeScript 5 + Tailwind CSS 4 |
 | Cache | Redis 7 + go-redis/v9 |
+| Storage | AWS S3 + aws-sdk-go-v2 |
 | Auth | golang-jwt v5 + bcrypt |
 | Infra | Docker Compose (PostgreSQL 16, Redis 7) |
 
@@ -49,15 +51,9 @@ docker compose up -d postgres redis
 # 2. Run migration
 docker compose exec -T postgres psql -U admin -d community < backend/migrations/001_init.sql
 
-# 3. Configure .env (in backend/)
-echo "DB_HOST=localhost
-DB_PORT=15432
-DB_USER=admin
-DB_PASSWORD=password
-DB_NAME=community
-REDIS_ADDR=localhost:6379
-REDIS_PASSWORD=
-REDIS_DB=0" > backend/.env
+# 3. Create config.yaml from template (in backend/)
+cp backend/config.example.yaml backend/config.yaml
+# Then edit backend/config.yaml with your actual credentials
 
 # 4. Start backend (:18080)
 cd backend && go run cmd/main.go
@@ -78,15 +74,16 @@ lingdu-feed/
 │   ├── config/config.go
 │   ├── migrations/001_init.sql
 │   └── internal/
-│       ├── common/        # DB pool, Redis client, errors, response helpers
-│       ├── handler/       # HTTP handlers → feed, post, social, follow, state, user
+│       ├── common/        # DB pool, Redis client, S3 client, errors, response helpers
+│       ├── handler/       # HTTP handlers → feed, post, social, follow, state, user, upload
 │       ├── middleware/    # AuthMiddleware, SoftAuthMiddleware
-│       ├── model/         # DB models + request/response DTOs
+│       ├── model/         # DB models + request/response DTOs (post, image, user, …)
 │       ├── cache/         # Redis business logic (ranking, candidate, follow, stats, feeditem, content, state)
-│       ├── repository/    # Raw SQL (sqlx), one file per table
+│       ├── repository/    # Raw SQL (sqlx), one file per table (post, image, follow, …)
 │       ├── router/        # Route groups & middleware binding
 │       ├── scheduler/     # Background tasks (score recalculation)
 │       ├── service/       # Business logic orchestration
+│       ├── storage/       # Image compression + S3 upload
 │       └── utils/         # JWT, filter helpers, Gin helpers
 ├── frontend/
 │   └── src/
@@ -128,6 +125,7 @@ This design allows:
 ```
 users ──1:N── posts ──1:N── comments (self-ref reply_id)
   │              │
+  │              ├── 1:N── post_images (image_url, sort_order)
   │              ├── N:M likes (user_id, post_id)
   │              ├── N:M favorites (user_id, post_id)
   │              └── N:M states (user_id, post_id, status 0-3)
@@ -176,6 +174,16 @@ Params: `request_type` (`initial`/`subsequent`), `cursor` (pagination id), `page
 | `POST` | `/api/posts` | Auth |
 | `PUT` | `/api/posts/:id` | Auth |
 | `DELETE` | `/api/posts/:id` | Auth |
+| `POST` | `/api/posts/:id/images` | Auth |
+
+### Upload
+
+| Method | Path | Auth |
+|---|---|---|
+| `POST` | `/api/upload` | Auth |
+
+Body: multipart/form-data with `file` field and optional `post_id` field.
+Returns: `{ "url": "https://..." }`
 
 ### Social
 
@@ -305,7 +313,7 @@ previously-seen posts to fill remaining slots.
 
 ### Phase 1 — Infra & Delivery
 
-- [ ] **Image Upload (S3)** — Single/multiple image upload with S3-compatible storage, thumbnails, and CDN fronting
+- [x] **Image Upload (S3)** — Single/multiple image upload (max 9 per post), automatic compression, feed thumbnails
 - [ ] **Deployment** — Containerize services, deploy to cloud platform with auto-scaling
 - [ ] **CI/CD** — Automated build, test, lint, and deploy pipeline
 - [ ] **Observability** — Structured logging (ELK), distributed tracing (Jaeger/Otel), metrics (Prometheus + Grafana), alerting

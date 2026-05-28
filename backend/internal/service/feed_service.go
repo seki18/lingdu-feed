@@ -82,7 +82,7 @@ func GetRecommendPosts(userID int, requestType string, cursorID int) ([]model.Fe
 	// ── Degrade: fill remaining with recommend (no status filter) ──
 	if len(result) < count {
 		remaining := count - len(result)
-		degradeCursorID := 0
+		degradeCursorID := cursorID
 		if len(result) > 0 {
 			degradeCursorID = result[len(result)-1]
 		}
@@ -90,8 +90,18 @@ func GetRecommendPosts(userID int, requestType string, cursorID int) ([]model.Fe
 		if userID != -1 {
 			degradedIDs, _ = utils.FilterPostIDs(degradedIDs, userID, false)
 		}
+		// ── NEVER break cursor: filter out IDs >= cursorID if cursor provided ──
+		if cursorID > 0 {
+			filtered := make([]int, 0, len(degradedIDs))
+			for _, id := range degradedIDs {
+				if id < cursorID {
+					filtered = append(filtered, id)
+				}
+			}
+			degradedIDs = filtered
+		}
 		result = append(result, take(degradedIDs, remaining)...)
-		log.Printf("[GetRecommendPosts] degrade=%d remaining=%d", len(degradedIDs), remaining)
+		log.Printf("[GetRecommendPosts] degrade=%d remaining=%d cursor=%d", len(degradedIDs), remaining, cursorID)
 	}
 
 	posts, err := cache.GetFeedItemsBatch(result)
@@ -99,6 +109,7 @@ func GetRecommendPosts(userID int, requestType string, cursorID int) ([]model.Fe
 		return nil, 0, err
 	}
 	attachStatsToFeedItems(posts)
+	attachFirstImages(posts)
 
 	newCursorID := 0
 	if len(posts) > 0 {
@@ -125,6 +136,7 @@ func GetFollowingPosts(userID int, cursorID int) ([]model.FeedItem, int, error) 
 		return nil, 0, err
 	}
 	attachStatsToFeedItems(posts)
+	attachFirstImages(posts)
 	newCursorID := 0
 	if len(posts) > 0 {
 		newCursorID = posts[len(posts)-1].ID
@@ -187,6 +199,7 @@ func GetHistoryPosts(userID, page, pageSize int) ([]model.FeedItem, int, error) 
 		return nil, 0, err
 	}
 	attachStatsToFeedItems(posts)
+	attachFirstImages(posts)
 	return posts, total, nil
 }
 
@@ -201,6 +214,7 @@ func GetFavoriteFeed(userID, page, pageSize int) ([]model.FeedItem, int, error) 
 		return nil, 0, err
 	}
 	attachStatsToFeedItems(posts)
+	attachFirstImages(posts)
 	return posts, total, nil
 }
 
@@ -233,6 +247,7 @@ func GetAuthorPage(userID, currentUserID, page, pageSize int) (model.User, []mod
 		return model.User{}, nil, 0, err
 	}
 	attachStatsToFeedItems(posts)
+	attachFirstImages(posts)
 	return user, posts, total, nil
 }
 
@@ -245,10 +260,26 @@ func attachStatsToFeedItems(items []model.FeedItem) {
 	}
 }
 
+func attachFirstImages(items []model.FeedItem) {
+	ids := make([]int, 0, len(items))
+	for _, item := range items {
+		ids = append(ids, item.ID)
+	}
+	imgMap, err := repository.GetFirstImagesByPostIDs(ids)
+	if err != nil {
+		return // best-effort, don't fail the whole feed
+	}
+	for i := range items {
+		if url, ok := imgMap[items[i].ID]; ok {
+			items[i].FirstImageURL = &url
+		}
+	}
+}
+
 func feedCount(requestType string) int {
 	switch requestType {
 	case "initial", "refresh":
-		return 6
+		return 8
 	case "subsequent", "next", "more":
 		return 10
 	default:

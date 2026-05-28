@@ -68,6 +68,24 @@ func CreateStats(id int) error {
 	return err
 }
 
+// GetExistingPostIDsByStats returns the subset of postIDs that actually exist in the posts table.
+// Used to filter out orphan stats cache entries before upsert.
+func GetExistingPostIDsByStats(ids []int) ([]int, error) {
+	if len(ids) == 0 {
+		return []int{}, nil
+	}
+	query, args, err := sqlx.In(`SELECT id FROM posts WHERE id IN (?)`, ids)
+	if err != nil {
+		return nil, err
+	}
+	query = common.DB.Rebind(query)
+	var existing []int
+	if err := common.DB.Select(&existing, query, args...); err != nil {
+		return nil, err
+	}
+	return existing, nil
+}
+
 // BatchUpsertStats bulk upserts stats rows (used by periodic cache sync).
 func BatchUpsertStats(stats []model.PostStats) error {
 	if len(stats) == 0 {

@@ -1,18 +1,29 @@
-# Node
+# ── Node / Next.js ──
 node_modules/
-frontend/node_modules/
-frontend/.next/
+.next/
+out/
+/build/
 
-# Go
-backend/bin/
-backend/*.exe
+# ── Go ──
+*.exe
+*.test
+*.out
+bin/
 
-# env
-.env
+# ── Sensitive files ──
+.env*
+*.pem
 
-# system
+# ── IDE ──
+.idea/
+.vscode/
+
+# ── OS ──
 .DS_Store
+Thumbs.db
 
-# Docker volumes
+# ── Other ──
 *.log
 test/
+coverage/
+.vercel/
